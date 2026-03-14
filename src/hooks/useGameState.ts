@@ -7,7 +7,7 @@
  *
  * 5天闭环：登录+任务+香火操作 → 累积至等级12
  */
-import { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 // ── 核心参数 ──────────────────────────────────────────────────
@@ -320,7 +320,12 @@ export function useGameState() {
       ns = processLevelUps(ns);
       return ns;
     });
-    toast.success(`${action}祈愿`, { description: `经验 +${exp}` });
+    toast.success(`${action}祈愿`, {
+      description: React.createElement(
+        'span', { style: { color: 'var(--cinnabar)', fontWeight: '700' } },
+        `经验 +${exp}`
+      )
+    });
   }, [processLevelUps]);
 
   /** 重置游戏（调试用） */

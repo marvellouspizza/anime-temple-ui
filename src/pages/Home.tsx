@@ -9,6 +9,9 @@ import bgTemple from "@/assets/bg-temple.mp4";
 import bgTempleImg from "@/assets/bg-temple.png";
 import pWoman from "@/assets/p-woman.png";
 import pMan from "@/assets/p-man.png";
+import incenseImg from "@/assets/点香.png";
+import gongfengImg from "@/assets/供奉.png";
+import tianxiangImg from "@/assets/添香.png";
 
 // 寺庙图片（eager 预加载，通过名称匹配查找）
 const _templeImageModules = import.meta.glob<string>("../assets/寺庙/*.png", {
@@ -43,9 +46,9 @@ import { toast } from "sonner";
 
 import {
   BookOpen,
+  CalendarCheck,
   ChevronLeft,
   ChevronRight,
-  Coins,
   Eye,
   Flame,
   Heart,
@@ -56,6 +59,7 @@ import {
   Music2,
   Pause,
   Play,
+  RotateCcw,
   Settings,
   SkipBack,
   SkipForward,
@@ -70,7 +74,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useGameState, TWELVE_TEMPLES } from "@/hooks/useGameState";
+import { useGameState, TWELVE_TEMPLES, INCENSE_ACTIONS } from "@/hooks/useGameState";
 
 // ── 成就面板 — 结缘记录静态数据 ─────────────────────────────
 const ACHIEVEMENT_ENCOUNTER_RECENT = [
@@ -131,6 +135,9 @@ export default function Home({ targetSection }: HomeProps) {
   // 布局解锁
   const [isLayoutUnlocked, setIsLayoutUnlocked] = useState(false);
 
+  // 香火操作动画
+  const [flashState, setFlashState] = useState<{ src: string; key: number } | null>(null);
+
   // 游戏核心状态
   const { state, expPercent, todayLoginAvailable, todayTaskAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame } = useGameState();
 
@@ -140,6 +147,9 @@ export default function Home({ targetSection }: HomeProps) {
 
   // 到此修行 — 神龛视频切换
   const [immersiveTempleId, setImmersiveTempleId] = useState<number | null>(null);
+
+  // 今日修行面板
+  const [showDailyPanel, setShowDailyPanel] = useState(false);
 
   // 其他僧人
   const [showMonksPanel, setShowMonksPanel] = useState(false);
@@ -151,12 +161,25 @@ export default function Home({ targetSection }: HomeProps) {
 
   // 实时动态
   const [liveTab, setLiveTab] = useState<"activity" | "chat">("activity");
+  const [liveH, setLiveH] = useState<number>(400);
 
   // 角色左右拖拽
   const shrineRef = useRef<HTMLDivElement>(null);
   const charRef = useRef<HTMLImageElement>(null);
   const [charX, setCharX] = useState<number | null>(null);
   const drag = useRef({ active: false, startMouseX: 0, startCharX: 0 });
+
+  // 同步神龛高度 → 实时动态面板
+  useEffect(() => {
+    const el = shrineRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      setLiveH(el.offsetHeight);
+    });
+    ro.observe(el);
+    setLiveH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
 
   // ── 音乐播放器 ──────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -265,6 +288,13 @@ export default function Home({ targetSection }: HomeProps) {
       {/* 氛围叠加：光晕 */}
       <div className="absolute inset-0 temple-noise" />
 
+      {/* 香火操作动画覆盖层 */}
+      {flashState && (
+        <div key={flashState.key} className="pointer-events-none absolute inset-0 z-[100] flex items-center justify-center">
+          <img src={flashState.src} alt="" className="incense-flash h-64 w-auto object-contain" />
+        </div>
+      )}
+
       {/* UI Overlay */}
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-5 py-5">
         {/* ── 解锁布局按钮（顶部中央浮动）── */}
@@ -309,21 +339,21 @@ export default function Home({ targetSection }: HomeProps) {
                 <AvatarFallback className="bg-black/30">MO</AvatarFallback>
               </Avatar>
               <div className="absolute -bottom-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full border border-[var(--bronze-green)]/60 bg-black/45 text-[10px] font-semibold">
-                12
+                {state.level}
               </div>
             </div>
 
             <div>
               <div className="flex items-baseline gap-1.5">
                 <span className="font-title text-lg leading-none text-[var(--cinnabar)]">墨墨</span>
-                <span className="text-[10px] text-foreground/60">Lv.12</span>
+                <span className="text-[10px] text-foreground/60">Lv.{state.level}</span>
               </div>
               <div className="mt-1 flex items-center gap-1.5">
                 <Progress
-                  value={62}
+                  value={expPercent}
                   className="h-1.5 w-[110px] bg-foreground/10"
                 />
-                <span className="text-[10px] text-foreground/60">62%</span>
+                <span className="text-[10px] text-foreground/60">{expPercent}%</span>
               </div>
             </div>
           </div>
@@ -332,13 +362,23 @@ export default function Home({ targetSection }: HomeProps) {
             <div className="temple-pill flex items-center gap-1.5 px-2 py-1">
               <Sparkles className="h-3 w-3 text-[var(--gold)]" />
               <span className="text-xs text-foreground/70">功德值</span>
-              <span className="text-xs font-semibold tabular-nums text-foreground">3,280</span>
+              <span className="text-xs font-semibold tabular-nums text-foreground">{formatMerit(state.merit)}</span>
             </div>
             <div className="temple-pill flex items-center gap-1.5 px-2 py-1">
               <Flame className="h-3 w-3 text-[var(--cinnabar)]" />
               <span className="text-xs text-foreground/70">香火钱</span>
-              <span className="text-xs font-semibold tabular-nums text-foreground">856</span>
+              <span className="text-xs font-semibold tabular-nums text-foreground">{state.incenseCoin}</span>
             </div>
+            {todayLoginAvailable && (
+              <button
+                className="temple-pill flex items-center gap-1 px-2 py-1 animate-pulse hover:animate-none"
+                onClick={doLogin}
+                aria-label="领取今日香火"
+              >
+                <CalendarCheck className="h-3 w-3 text-[var(--gold)]" />
+                <span className="text-[10px] text-[var(--gold)] font-medium">签到</span>
+              </button>
+            )}
             <button
               className="temple-icon-btn h-8 w-8"
               onClick={() => setTheme(theme === "dark" ? "warm" : "dark")}
@@ -444,10 +484,10 @@ export default function Home({ targetSection }: HomeProps) {
             <DraggableCard id="left-nav" isUnlocked={isLayoutUnlocked}>
             <div className="temple-panel flex flex-col items-center gap-3 rounded-3xl p-3">
               {([
-                { label: "寺庙概览", icon: <Landmark className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
-                { label: "其他僧人", icon: <Users    className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
-                { label: "祈福道具", icon: <Sparkles className="h-5 w-5" />, onClick: () => comingSoon("祈福道具") },
-                { label: "成就",     icon: <Trophy   className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
+                { label: "寺庙概览", icon: <Landmark     className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
+                { label: "其他僧人", icon: <Users        className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
+                { label: "今日修行", icon: <CalendarCheck className="h-5 w-5" />, onClick: () => setShowDailyPanel(true) },
+                { label: "成就",     icon: <Trophy       className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
               ] as const).map(({ label, icon, onClick }) => (
                 <button
                   key={label}
@@ -469,7 +509,10 @@ export default function Home({ targetSection }: HomeProps) {
           <DraggableCard id="shrine" isUnlocked={isLayoutUnlocked} resizable>
           <div ref={shrineRef} className="temple-shrine-frame">
             <video
-              src={bgTemple}
+              key={immersiveTempleId ?? 0}
+              src={immersiveTempleId !== null
+                ? (getTempleVideo(TWELVE_TEMPLES.find(t => t.id === immersiveTempleId)!.name) ?? bgTemple)
+                : bgTemple}
               autoPlay
               loop
               muted
@@ -496,7 +539,7 @@ export default function Home({ targetSection }: HomeProps) {
           {/* 右侧：实时动态 */}
           <aside className="absolute right-0 top-1/2 -translate-y-1/2">
             <DraggableCard id="live-panel" isUnlocked={isLayoutUnlocked} resizable>
-            <div className="temple-panel relative w-56 flex flex-col rounded-2xl overflow-hidden">
+            <div className="temple-panel relative w-56 flex flex-col rounded-2xl overflow-hidden" style={{ height: liveH }}>
               {/* 标题行 */}
               <div className="flex items-center justify-between px-3 pt-3 pb-2">
                 <span className="font-title text-base text-[var(--gold)]">实时动态</span>
@@ -521,11 +564,36 @@ export default function Home({ targetSection }: HomeProps) {
               {/* 分割线 */}
               <div className="mx-3 h-px bg-[var(--bronze-green)]/20" />
               {/* 内容区 */}
-              <div className="flex-1 min-h-[400px] overflow-y-auto px-3 py-3">
+              <div className="flex-1 overflow-y-auto px-3 py-3">
                 {liveTab === "activity" ? (
-                  <div className="flex h-full items-center justify-center">
-                    <span className="text-xs text-foreground/30">暂无修行动态</span>
-                  </div>
+                  state.activityLog.length === 0 ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                      <span className="text-2xl opacity-30">🏯</span>
+                      <span className="text-xs text-foreground/30">尚未开始修行<br/>签到后动态将显示于此</span>
+                    </div>
+                  ) : (
+                    <div>
+                      {state.activityLog.map((entry, i) => (
+                        <div key={entry.id} className="flex gap-2.5">
+                          {/* 时间轴竖线 + 图标 */}
+                          <div className="flex flex-col items-center" style={{ minWidth: 22 }}>
+                            <div className="text-base leading-none mt-0.5 shrink-0">{entry.icon}</div>
+                            {i < state.activityLog.length - 1 && (
+                              <div className="mt-1.5 flex-1 w-px bg-[var(--bronze-green)]/20" style={{ minHeight: 14 }} />
+                            )}
+                          </div>
+                          {/* 文字 */}
+                          <div className="pb-3 min-w-0">
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-[10px] text-foreground/40 tabular-nums shrink-0">{entry.time}</span>
+                              <span className="text-xs font-medium text-foreground/85 leading-snug">{entry.action}</span>
+                            </div>
+                            <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">{entry.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 ) : (
                   <div className="flex h-full items-center justify-center">
                     <span className="text-xs text-foreground/30">聊天功能即将开放</span>
@@ -578,22 +646,91 @@ export default function Home({ targetSection }: HomeProps) {
 
           {/* Quick Actions */}
           <DraggableCard id="quick-actions" isUnlocked={isLayoutUnlocked}>
-          <section className="temple-panel relative w-56 self-start rounded-2xl px-4 pt-3 pb-3">
-            <div className="flex gap-3 justify-center items-center">
-              <button
-                className="temple-icon-btn h-10 w-10"
-                onClick={() => comingSoon("投币")}
-                aria-label="投币"
-              >
-                <Coins className="h-5 w-5 text-foreground" />
-              </button>
-              <button
-                className="temple-icon-btn h-10 w-10"
-                onClick={() => comingSoon("添香")}
-                aria-label="添香"
-              >
-                <Flame className="h-5 w-5 text-foreground" />
-              </button>
+          <section className="temple-panel relative w-fit overflow-hidden rounded-2xl px-4 py-3">
+            <div className="flex gap-3 justify-center items-end">
+              {/* 点香 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => { useIncenseCoin("点香"); setFlashState({ src: incenseImg, key: Date.now() }); }} aria-label="点香">
+                    <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--cinnabar)]/10 ring-1 ring-[var(--cinnabar)]/30 transition-all group-hover:bg-[var(--cinnabar)]/20 group-hover:ring-[var(--cinnabar)]/60 group-active:scale-95">
+                      <Flame className="h-5 w-5 text-[var(--cinnabar)]" />
+                    </div>
+                    <span className="text-[9px] text-foreground/55 leading-none">点香</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p className="text-xs">点香 · 消耗 {INCENSE_ACTIONS.点香.cost} 香火钱，经验 +{INCENSE_ACTIONS.点香.exp}</p></TooltipContent>
+              </Tooltip>
+
+              {/* 供奉 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => { useIncenseCoin("供奉"); setFlashState({ src: gongfengImg, key: Date.now() }); }} aria-label="供奉">
+                    <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--gold)]/10 ring-1 ring-[var(--gold)]/30 transition-all group-hover:bg-[var(--gold)]/20 group-hover:ring-[var(--gold)]/60 group-active:scale-95">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[var(--gold)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M5 12 Q5 4 12 4 Q19 4 19 12" /><line x1="3" y1="12" x2="21" y2="12" />
+                        <path d="M5.5 12 Q4.5 17 7 19.5 Q12 21 17 19.5 Q19.5 17 18.5 12" />
+                        <path d="M5.5 14 L3 14 L3 17.5 L5.5 17.5" /><path d="M18.5 14 L21 14 L21 17.5 L18.5 17.5" />
+                        <line x1="9" y1="20.5" x2="8" y2="23" /><line x1="15" y1="20.5" x2="16" y2="23" />
+                      </svg>
+                    </div>
+                    <span className="text-[9px] text-foreground/55 leading-none">供奉</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p className="text-xs">供奉 · 消耗 {INCENSE_ACTIONS.供奉.cost} 香火钱，经验 +{INCENSE_ACTIONS.供奉.exp}</p></TooltipContent>
+              </Tooltip>
+
+              {/* 添香 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => { useIncenseCoin("添香"); setFlashState({ src: tianxiangImg, key: Date.now() }); }} aria-label="添香">
+                    <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--bronze-green)]/10 ring-1 ring-[var(--bronze-green)]/30 transition-all group-hover:bg-[var(--bronze-green)]/20 group-hover:ring-[var(--bronze-green)]/60 group-active:scale-95">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[var(--bronze-green)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M8 8 Q7.5 6 8 4" /><path d="M12 7 Q11.5 5 12 3" /><path d="M16 8 Q15.5 6 16 4" />
+                        <line x1="8" y1="8" x2="8" y2="18" /><line x1="12" y1="7" x2="12" y2="18" /><line x1="16" y1="8" x2="16" y2="18" />
+                        <rect x="5" y="18" width="14" height="3" rx="1" />
+                      </svg>
+                    </div>
+                    <span className="text-[9px] text-foreground/55 leading-none">添香</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p className="text-xs">添香 · 消耗 {INCENSE_ACTIONS.添香.cost} 香火钱，经验 +{INCENSE_ACTIONS.添香.exp}</p></TooltipContent>
+              </Tooltip>
+
+              <div className="h-8 w-px bg-[var(--bronze-green)]/20 mb-4" />
+
+              {/* 结缘 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={doMorningTask} aria-label="结缘任务">
+                    <div className={`grid h-11 w-11 place-items-center rounded-full transition-all group-active:scale-95 ${
+                      todayTaskAvailable
+                        ? "bg-[var(--gold)]/10 ring-1 ring-[var(--gold)]/50 group-hover:bg-[var(--gold)]/20 group-hover:ring-[var(--gold)]/80"
+                        : "bg-foreground/5 ring-1 ring-foreground/15"
+                    }`}>
+                      <Users className={`h-5 w-5 ${todayTaskAvailable ? "text-[var(--gold)]" : "text-foreground/30"}`} />
+                    </div>
+                    <span className={`text-[9px] leading-none ${todayTaskAvailable ? "text-[var(--gold)]" : "text-foreground/30"}`}>结缘</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p className="text-xs">{todayTaskAvailable ? "结缘一位道友 · 获经验与香火钱" : "今日已结缘"}</p></TooltipContent>
+              </Tooltip>
+
+              {/* 签到 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={doLogin} aria-label="每日签到">
+                    <div className={`grid h-11 w-11 place-items-center rounded-full transition-all group-active:scale-95 ${
+                      todayLoginAvailable
+                        ? "bg-[var(--cinnabar)]/10 ring-1 ring-[var(--cinnabar)]/50 group-hover:bg-[var(--cinnabar)]/20 group-hover:ring-[var(--cinnabar)]/80"
+                        : "bg-foreground/5 ring-1 ring-foreground/15"
+                    }`}>
+                      <CalendarCheck className={`h-5 w-5 ${todayLoginAvailable ? "text-[var(--cinnabar)]" : "text-foreground/30"}`} />
+                    </div>
+                    <span className={`text-[9px] leading-none ${todayLoginAvailable ? "text-[var(--cinnabar)]" : "text-foreground/30"}`}>签到</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p className="text-xs">{todayLoginAvailable ? `领取第 ${state.day + 1} 天香火` : "今日已签到"}</p></TooltipContent>
+              </Tooltip>
             </div>
           </section>
           </DraggableCard>
@@ -674,7 +811,7 @@ export default function Home({ targetSection }: HomeProps) {
                       <div className="flex gap-2">
                         {isUnlocked && (
                           <button
-                            className="temple-ornate-btn px-4 py-1.5 text-xs bg-[var(--cinnabar)]/20 ring-1 ring-[var(--cinnabar)]/50 text-[var(--cinnabar)] hover:bg-[var(--cinnabar)]/30"
+                            className="temple-ornate-btn px-4 py-1.5 text-xs bg-[var(--cinnabar)]/20 ring-1 ring-[var(--cinnabar)]/50 text-white hover:bg-[var(--cinnabar)]/30"
                             onClick={() => { setImmersiveTempleId(temple.id); setShowTempleOverview(false); setSelectedTempleId(null); }}
                           >✦ 到此修行</button>
                         )}
@@ -1117,6 +1254,123 @@ export default function Home({ targetSection }: HomeProps) {
                 className="temple-ornate-btn px-5 py-2 text-sm"
                 onClick={() => setShowAchievement(false)}
               >关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 今日修行面板 */}
+      {showDailyPanel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowDailyPanel(false); }}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative z-10 w-[480px] max-w-[94vw] temple-panel rounded-3xl overflow-hidden select-none">
+
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--bronze-green)]/30">
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="h-4 w-4 text-[var(--gold)]" />
+                <span className="font-title text-xl text-[var(--gold)]">今日修行</span>
+                {state.day > 0 && (
+                  <span className="temple-pill px-2 py-0.5 text-[10px] text-foreground/60">第 {state.day} / 5 天</span>
+                )}
+              </div>
+              <button className="text-foreground/40 hover:text-foreground transition-colors text-2xl leading-none px-1"
+                onClick={() => setShowDailyPanel(false)} aria-label="关闭">×</button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* 5天进度 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-foreground/60">五日修行进度</span>
+                  <span className="text-xs text-foreground/50">{state.day} / 5 天</span>
+                </div>
+                <div className="flex gap-1.5">
+                  {[1,2,3,4,5].map(d => (
+                    <div key={d} className={`flex-1 h-2 rounded-full transition-colors ${d <= state.day ? "bg-[var(--gold)]" : "bg-foreground/15"}`} />
+                  ))}
+                </div>
+                <div className="flex justify-between mt-1">
+                  {[1,2,3,4,5].map(d => (
+                    <span key={d} className={`text-[9px] ${d <= state.day ? "text-[var(--gold)]" : "text-foreground/30"}`}>天{d}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="h-px bg-[var(--bronze-green)]/20" />
+
+              {/* 每日签到 */}
+              <div className="temple-pill flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className={`grid h-9 w-9 place-items-center rounded-full ${state.dailyLoginDone ? "bg-[var(--gold)]/15 ring-1 ring-[var(--gold)]/30" : "bg-[var(--cinnabar)]/15 ring-1 ring-[var(--cinnabar)]/40"}`}>
+                    <CalendarCheck className={`h-4 w-4 ${state.dailyLoginDone ? "text-[var(--gold)]" : "text-[var(--cinnabar)]"}`} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-foreground/85">每日签到</div>
+                    <div className="text-[10px] text-foreground/50 mt-0.5">
+                      {state.dailyLoginDone ? "今日已签到 · 领取香火钱 + 经验" : `签到领取：香火钱 +${[10,12,14,16,18][Math.min(state.day, 4)]}，经验 +100`}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className={`temple-ornate-btn px-4 py-1.5 text-sm ${state.dailyLoginDone ? "opacity-50 cursor-default" : ""}`}
+                  onClick={doLogin} disabled={state.dailyLoginDone}
+                >{state.dailyLoginDone ? "已领取" : "领取"}</button>
+              </div>
+
+              {/* 结缘任务 */}
+              <div className="temple-pill flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className={`grid h-9 w-9 place-items-center rounded-full ${
+                    state.dailyTaskDone ? "bg-[var(--gold)]/15 ring-1 ring-[var(--gold)]/30"
+                    : state.dailyLoginDone ? "bg-[var(--cinnabar)]/15 ring-1 ring-[var(--cinnabar)]/40"
+                    : "bg-foreground/10 ring-1 ring-foreground/15"
+                  }`}>
+                    <Users className={`h-4 w-4 ${state.dailyTaskDone ? "text-[var(--gold)]" : state.dailyLoginDone ? "text-[var(--cinnabar)]" : "text-foreground/30"}`} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-foreground/85">结缘一位道友</div>
+                    <div className="text-[10px] text-foreground/50 mt-0.5">
+                      {state.dailyTaskDone ? "今日已结缘 · 修行圆满"
+                        : state.dailyLoginDone ? `经验 +80~120，香火钱 +${[20,22,24,26,28][Math.min(state.day-1, 4)]}（30% 触发信物）`
+                        : "请先完成每日签到"}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className={`temple-ornate-btn px-4 py-1.5 text-sm ${(state.dailyTaskDone || !state.dailyLoginDone) ? "opacity-50 cursor-default" : ""}`}
+                  onClick={doMorningTask} disabled={state.dailyTaskDone || !state.dailyLoginDone}
+                >{state.dailyTaskDone ? "已完成" : "出发"}</button>
+              </div>
+
+              <div className="h-px bg-[var(--bronze-green)]/20" />
+
+              {/* 统计 */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "香火钱", value: state.incenseCoin, icon: <Flame className="h-3.5 w-3.5 text-[var(--cinnabar)]" /> },
+                  { label: "功德值", value: state.merit, icon: <Sparkles className="h-3.5 w-3.5 text-[var(--gold)]" /> },
+                  { label: "结缘次数", value: state.encounterCount, icon: <Heart className="h-3.5 w-3.5 text-[#e08080]" /> },
+                ].map(({ label, value, icon }) => (
+                  <div key={label} className="temple-pill flex flex-col items-center gap-1.5 py-3">
+                    {icon}
+                    <div className="font-title text-xl leading-none text-[var(--gold)]">{value.toLocaleString("zh-CN")}</div>
+                    <div className="text-[10px] text-foreground/50">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center pt-1">
+                <button
+                  className="flex items-center gap-1 text-[10px] text-foreground/25 hover:text-foreground/50 transition-colors"
+                  onClick={() => { resetGame(); setShowDailyPanel(false); }}
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />重置修行
+                </button>
+                <button className="temple-ornate-btn px-5 py-2 text-sm" onClick={() => setShowDailyPanel(false)}>关闭</button>
+              </div>
             </div>
           </div>
         </div>

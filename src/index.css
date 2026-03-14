@@ -2,13 +2,15 @@
 @import "tw-animate-css";
 
 @keyframes incense-flash {
-  0%   { opacity: 0;    transform: scale(0.88); }
-  18%  { opacity: 0.72; transform: scale(1);    }
-  100% { opacity: 0;    transform: scale(1.06); }
+  0%   { opacity: 0;    transform: scale(0.6) translateY(20px); }
+  22%  { opacity: 0.9;  transform: scale(1.04) translateY(-4px); }
+  50%  { opacity: 0.9;  transform: scale(1) translateY(0); }
+  100% { opacity: 0;    transform: scale(1.1) translateY(-12px); }
 }
 
 .incense-flash {
-  animation: incense-flash 1s ease-out forwards;
+  animation: incense-flash 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  filter: drop-shadow(0 0 32px rgba(210, 140, 60, 0.5));
 }
 
 @custom-variant dark (&:is(.dark *));
