@@ -1,0 +1,376 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@keyframes incense-flash {
+  0%   { opacity: 0;    transform: scale(0.88); }
+  18%  { opacity: 0.72; transform: scale(1);    }
+  100% { opacity: 0;    transform: scale(1.06); }
+}
+
+.incense-flash {
+  animation: incense-flash 1s ease-out forwards;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── 等比缩放：固定 1440px 设计稿宽度，随视口等比缩放 ── */
+html, body {
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+#root {
+  width: 1440px;
+  height: calc(100vh / var(--vp-scale, 1));
+  transform-origin: top left;
+  transform: scale(var(--vp-scale, 1));
+  overflow: hidden;
+}
+
+@theme inline {
+  /* ── 圆角 ── */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* ── 语义色映射 ── */
+  --color-background:             var(--background);
+  --color-foreground:             var(--foreground);
+  --color-card:                   var(--card);
+  --color-card-foreground:        var(--card-foreground);
+  --color-popover:                var(--popover);
+  --color-popover-foreground:     var(--popover-foreground);
+  --color-primary:                var(--primary);
+  --color-primary-foreground:     var(--primary-foreground);
+  --color-secondary:              var(--secondary);
+  --color-secondary-foreground:   var(--secondary-foreground);
+  --color-muted:                  var(--muted);
+  --color-muted-foreground:       var(--muted-foreground);
+  --color-accent:                 var(--accent);
+  --color-accent-foreground:      var(--accent-foreground);
+  --color-destructive:            var(--destructive);
+  --color-border:                 var(--border);
+  --color-input:                  var(--input);
+  --color-ring:                   var(--ring);
+
+  /* ── 寺庙主题色（可作 Tailwind 工具类：text-cinnabar / bg-gold 等） ── */
+  --color-cinnabar:               var(--cinnabar);
+  --color-gold:                   var(--gold);
+  --color-bronze-green:           var(--bronze-green);
+  --color-ming-yellow:            var(--ming-yellow);
+
+  /* ── 图表 ── */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* ── 侧边栏 ── */
+  --color-sidebar:                    var(--sidebar);
+  --color-sidebar-foreground:         var(--sidebar-foreground);
+  --color-sidebar-primary:            var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent:             var(--sidebar-accent);
+  --color-sidebar-accent-foreground:  var(--sidebar-accent-foreground);
+  --color-sidebar-border:             var(--sidebar-border);
+  --color-sidebar-ring:               var(--sidebar-ring);
+}
+
+/* ── 寺庙深色主题（应用始终以 dark 模式运行） ── */
+:root {
+  --radius: 0.9rem;
+  color-scheme: dark;
+
+  /* 朱砂红 / 明黄 / 古铜绿 / 金色 */
+  --cinnabar:     oklch(0.54 0.22 28);
+  --ming-yellow:  oklch(0.72 0.16 82);
+  --bronze-green: oklch(0.44 0.13 162);
+  --gold:         oklch(0.68 0.14 76);
+
+  /* 语义色 */
+  --background:             oklch(0.94 0.04 155);
+  --foreground:             oklch(0.18 0.04 160);
+
+  --card:                   oklch(0.97 0.025 155 / 55%);
+  --card-foreground:        oklch(0.18 0.04 160);
+  --popover:                oklch(0.97 0.025 155 / 58%);
+  --popover-foreground:     oklch(0.18 0.04 160);
+
+  --primary:                var(--cinnabar);
+  --primary-foreground:     oklch(0.98 0.01 95);
+  --secondary:              oklch(0.44 0.13 162 / 20%);
+  --secondary-foreground:   oklch(0.18 0.04 160);
+  --muted:                  oklch(0.88 0.04 155 / 60%);
+  --muted-foreground:       oklch(0.38 0.05 160 / 80%);
+  --accent:                 oklch(0.54 0.22 28 / 15%);
+  --accent-foreground:      oklch(0.18 0.04 160);
+  --destructive:            var(--cinnabar);
+
+  --border:                 oklch(0.44 0.13 162 / 28%);
+  --input:                  oklch(0 0 0 / 8%);
+  --ring:                   oklch(0.44 0.13 162 / 45%);
+
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.170 162.480);
+  --chart-3: oklch(0.769 0.188  70.080);
+  --chart-4: oklch(0.627 0.265 303.900);
+  --chart-5: oklch(0.645 0.246  16.439);
+
+  --sidebar:                   oklch(0.91 0.04 155);
+  --sidebar-foreground:        oklch(0.18 0.04 160);
+  --sidebar-primary:           var(--cinnabar);
+  --sidebar-primary-foreground: oklch(0.98 0.01 95);
+  --sidebar-accent:            oklch(0.88 0.04 155);
+  --sidebar-accent-foreground: oklch(0.18 0.04 160);
+  --sidebar-border:            oklch(0 0 0 / 10%);
+  --sidebar-ring:              oklch(0.44 0.13 162 / 45%);
+}
+
+/* .dark 由 ThemeProvider 挂在 <html> 上；应用不切换主题，直接继承 :root 即可 */
+.dark {
+  color-scheme: dark;
+}
+
+/* ── 暖棕禅香主题 ── */
+.warm {
+  color-scheme: light;
+
+  /* 朱砂红不变；铜绿改为焦糖棕；金色偏暖琥珀 */
+  --cinnabar:     oklch(0.50 0.20 28);
+  --ming-yellow:  oklch(0.66 0.13 68);
+  --bronze-green: oklch(0.46 0.11 50);  /* 焦糖棕，取代绿调 */
+  --gold:         oklch(0.42 0.13 52);  /* 深琥珀棕金，浅色背景下清晰可读 */
+
+  /* 背景：H=50 暖棕，比原来 H=65 明显更棕 */
+  --background:             oklch(24.666% 0.05717 48.641 / 0.786);
+  --foreground:             oklch(0.18 0.06 42);
+
+  --card:                   oklch(0.94 0.055 52 / 75%);
+  --card-foreground:        oklch(0.18 0.06 42);
+  --popover:                oklch(0.94 0.055 52 / 82%);
+  --popover-foreground:     oklch(0.18 0.06 42);
+
+  --primary:                oklch(0.50 0.20 28);
+  --primary-foreground:     oklch(0.98 0.01 95);
+  --secondary:              oklch(0.58 0.09 52 / 20%);
+  --secondary-foreground:   oklch(0.18 0.06 42);
+  --muted:                  oklch(0.82 0.06 50 / 65%);
+  --muted-foreground:       oklch(0.40 0.07 46 / 80%);
+  --accent:                 oklch(0.50 0.20 28 / 12%);
+  --accent-foreground:      oklch(0.18 0.06 42);
+  --destructive:            oklch(0.50 0.20 28);
+
+  --border:                 oklch(0.50 0.10 48 / 30%);
+  --input:                  oklch(0.50 0.10 48 / 10%);
+  --ring:                   oklch(0.50 0.10 48 / 44%);
+
+  --sidebar:                   oklch(0.84 0.07 50);
+  --sidebar-foreground:        oklch(0.18 0.06 42);
+  --sidebar-primary:           oklch(0.50 0.20 28);
+  --sidebar-primary-foreground: oklch(0.98 0.01 95);
+  --sidebar-accent:            oklch(0.82 0.06 50);
+  --sidebar-accent-foreground: oklch(0.18 0.06 42);
+  --sidebar-border:            oklch(0.50 0.10 48 / 20%);
+  --sidebar-ring:              oklch(0.50 0.10 48 / 44%);
+}
+
+/* ── 暖棕主题下的组件覆盖（去除硬编码绿色值）── */
+.warm .temple-noise {
+  background-image:
+    radial-gradient(1200px 700px at 50% 20%, oklch(59.535% 0.14779 49.911 / 0.67)t 60%),
+    radial-gradient(900px 500px at 20% 80%, oklch(40.34% 0.10442 47.723 / 0.701), transparent 55%),
+    radial-gradient(700px 500px at 85% 75%, oklch(33.67% 0.10777 33.315 / 0.561), transparent 60%);
+}
+
+.warm .temple-panel {
+  background: oklch(71.697% 0.08422 62.182 / 0.65);
+  border-color: oklch(0.50 0.10 48 / 32%);
+  box-shadow:
+    0 18px 55px oklch(0.28 0.07 40 / 18%),
+    inset 0 1px 0 oklch(1 0 0 / 55%);
+}
+
+.warm .temple-panel::after {
+  background:
+    linear-gradient(135deg, oklch(0.62 0.12 68 / 18%), transparent 22%),
+    linear-gradient(315deg, oklch(0.50 0.10 48 / 12%), transparent 28%);
+}
+
+.warm .temple-icon-btn {
+  background: oklch(87.486% 0.08582 62.876 / 0.7);
+  border-color: oklch(0.50 0.10 48 / 30%);
+  box-shadow:
+    0 10px 26px oklch(0.28 0.07 40 / 12%),
+    inset 0 1px 0 oklch(1 0 0 / 55%);
+}
+.warm .temple-icon-btn:hover {
+  background: oklch(91.132% 0.04416 68.281 / 0.85);
+  box-shadow:
+    0 16px 36px oklch(0.28 0.07 40 / 18%),
+    inset 0 1px 0 oklch(1 0 0 / 65%);
+}
+
+.warm .temple-pill {
+  background: oklch(82.55% 0.09107 62.209 / 0.65);
+  border-color: oklch(0.50 0.10 48 / 28%);
+}
+
+.warm .temple-shrine-frame {
+  border-color: oklch(0.50 0.10 48 / 40%);
+  box-shadow:
+    0 0 0 4px oklch(0.50 0.10 48 / 10%),
+    0 0 40px oklch(0.50 0.10 48 / 12%),
+    0 24px 64px oklch(0.28 0.07 40 / 25%),
+    inset 0 1px 0 oklch(1 0 0 / 35%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Noto Sans SC", ui-sans-serif, system-ui;
+    cursor: url("./assets/cursor-woodfish-64.png") 16 16, auto;
+  }
+  body.cursor-pressed,
+  body.cursor-pressed * {
+    cursor: url("./assets/cursor-woodfish-sm.png") 15 15, auto !important;
+  }
+
+  h1, h2, h3, .font-title {
+    font-family: "Ma Shan Zheng", "Noto Sans SC", ui-sans-serif, system-ui;
+    letter-spacing: 0.02em;
+  }
+}
+
+@layer components {
+  .temple-noise {
+    background-image:
+      radial-gradient(1200px 700px at 50% 20%, oklch(0.52 0.20 28 / 7%), transparent 60%),
+      radial-gradient(900px 500px at 20% 80%, oklch(0.42 0.14 162 / 14%), transparent 55%),
+      radial-gradient(700px 500px at 85% 75%, oklch(0.62 0.13 76 / 8%), transparent 60%);
+  }
+
+  .temple-panel {
+    position: relative;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(14px);
+    background: oklch(0.97 0.025 155 / 50%);
+    border: 1px solid oklch(0.42 0.14 162 / 30%);
+    box-shadow:
+      0 18px 55px oklch(0.3 0.06 160 / 18%),
+      inset 0 1px 0 oklch(1 0 0 / 60%);
+  }
+  button.temple-panel:active {
+    transform: scale(0.95);
+  }
+
+  /* 需求变更：保留毛玻璃，但移除中式回纹/莲纹边缘装饰 */
+  .temple-panel::before {
+    content: none;
+  }
+
+  .temple-panel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      linear-gradient(135deg, oklch(0.62 0.13 76 / 18%), transparent 22%),
+      linear-gradient(315deg, oklch(0.42 0.14 162 / 12%), transparent 28%);
+    opacity: 0.65;
+  }
+
+  .temple-icon-btn {
+    @apply grid place-items-center;
+    border-radius: 999px;
+    background: oklch(0.97 0.025 155 / 60%);
+    border: 1px solid oklch(0.42 0.14 162 / 30%);
+    box-shadow:
+      0 10px 26px oklch(0.3 0.06 160 / 12%),
+      inset 0 1px 0 oklch(1 0 0 / 60%);
+    transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+  .temple-icon-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    background: oklch(0.99 0.015 155 / 80%);
+    box-shadow:
+      0 16px 36px oklch(0.3 0.06 160 / 18%),
+      inset 0 1px 0 oklch(1 0 0 / 70%);
+  }
+  .temple-icon-btn:active {
+    transform: scale(0.92);
+  }
+
+  .temple-ornate-btn {
+    position: relative;
+    border-radius: 999px;
+    padding: 0.9rem 1.25rem;
+    font-weight: 700;
+    color: oklch(0.98 0.01 95);
+    background: linear-gradient(180deg, oklch(0.55 0.22 28 / 85%), oklch(0.45 0.18 28 / 85%));
+    border: 1px solid oklch(0.86 0.15 86 / 70%);
+    box-shadow:
+      0 18px 38px oklch(0.12 0.02 35 / 60%),
+      inset 0 1px 0 oklch(1 0 0 / 22%);
+    transition: transform 180ms ease, filter 180ms ease;
+  }
+  .temple-ornate-btn::before {
+    content: none;
+  }
+  .temple-ornate-btn:hover {
+    transform: translateY(-2px);
+    filter: saturate(1.12) brightness(1.06);
+  }
+  .temple-ornate-btn:active {
+    transform: translateY(0px) scale(0.92);
+  }
+
+  .temple-pill {
+    border-radius: 999px;
+    background: oklch(0.97 0.025 155 / 60%);
+    border: 1px solid oklch(0.42 0.14 162 / 30%);
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 60%);
+  }
+
+  /* 点击时切换小光标 */
+  /* (via body.cursor-pressed class toggled in JS) */
+
+  /* 神龛之窗 — 画中画视频框 */
+  .temple-shrine-frame {
+    position: relative;
+    width: 68vw;
+    max-width: 900px;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid oklch(0.42 0.14 162 / 40%);
+    box-shadow:
+      0 0 0 4px oklch(0.42 0.14 162 / 10%),
+      0 0 40px oklch(0.42 0.14 162 / 15%),
+      0 24px 64px oklch(0.3 0.06 160 / 30%),
+      inset 0 1px 0 oklch(1 0 0 / 40%);
+  }
+
+  .temple-shrine-frame video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+    display: block;
+  }
+
+  @keyframes merit-float {
+    0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-22px); }
+  }
+
+  .animate-merit-float {
+    animation: merit-float 0.7s ease-out forwards;
+  }
+}

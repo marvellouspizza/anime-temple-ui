@@ -1,0 +1,44 @@
+import * as React from "react";
+
+export type Theme = "dark" | "warm";
+
+interface ThemeContextType {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+}
+
+const ThemeContext = React.createContext<ThemeContextType | undefined>(undefined);
+
+interface ThemeProviderProps {
+  children: React.ReactNode;
+  defaultTheme?: Theme;
+}
+
+export function ThemeProvider({
+  children,
+  defaultTheme = "dark",
+}: ThemeProviderProps) {
+  const [theme, setThemeState] = React.useState<Theme>(defaultTheme);
+
+  React.useEffect(() => {
+    document.documentElement.classList.remove("dark", "warm");
+    document.documentElement.classList.add(theme);
+  }, [theme]);
+
+  const setTheme = (t: Theme) => setThemeState(t);
+
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  const context = React.useContext(ThemeContext);
+  if (!context) {
+    throw new Error("useTheme must be used within a ThemeProvider");
+  }
+  return context;
+}
+
