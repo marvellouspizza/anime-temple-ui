@@ -7,7 +7,7 @@
  *
  * 5天闭环：登录+任务+香火操作 → 累积至等级12
  */
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 // ── 核心参数 ──────────────────────────────────────────────────
@@ -301,7 +301,10 @@ export function useGameState() {
     const { cost, exp } = INCENSE_ACTIONS[action];
     // 在 setState 外读取当前状态，避免 StrictMode 双调用导致 toast 触发两次
     if (stateRef.current.incenseCoin < cost) {
-      toast.error("香火钱不足", { description: `${action}需要 ${cost} 香火钱` });
+      toast.error("香火钱不足", {
+        description: `${action}需要 ${cost} 香火钱`,
+        classNames: { description: 'exp-highlight' }
+      });
       return;
     }
     setState(prev => {
@@ -321,10 +324,8 @@ export function useGameState() {
       return ns;
     });
     toast.success(`${action}祈愿`, {
-      description: React.createElement(
-        'span', { className: 'exp-highlight' },
-        `经验 +${exp}`
-      )
+      description: `经验 +${exp}`,
+      classNames: { description: 'exp-highlight' }
     });
   }, [processLevelUps]);
 

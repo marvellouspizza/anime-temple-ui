@@ -9,6 +9,9 @@ import bgTemple from "@/assets/bg-temple.mp4";
 import bgTempleImg from "@/assets/bg-temple.png";
 import pWoman from "@/assets/p-woman.png";
 import pMan from "@/assets/p-man.png";
+import incenseImg from "@/assets/点香.png";
+import gongfengImg from "@/assets/供奉.png";
+import tianxiangImg from "@/assets/添香.png";
 
 // 寺庙图片（eager 预加载，通过名称匹配查找）
 const _templeImageModules = import.meta.glob<string>("../assets/寺庙/*.png", {
@@ -157,6 +160,9 @@ export default function Home({ targetSection }: HomeProps) {
   // 布局解锁
   const [isLayoutUnlocked, setIsLayoutUnlocked] = useState(false);
 
+  // 香火动画
+  const [flashState, setFlashState] = useState<{ src: string; key: number } | null>(null);
+
   // 游戏核心状态
   const { state, expPercent, todayLoginAvailable, todayTaskAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame } = useGameState();
 
@@ -180,12 +186,23 @@ export default function Home({ targetSection }: HomeProps) {
 
   // 实时动态
   const [liveTab, setLiveTab] = useState<"activity" | "chat">("activity");
+  const [liveH, setLiveH] = useState(480);
 
   // 角色左右拖拽
   const shrineRef = useRef<HTMLDivElement>(null);
   const charRef = useRef<HTMLImageElement>(null);
   const [charX, setCharX] = useState<number | null>(null);
   const drag = useRef({ active: false, startMouseX: 0, startCharX: 0 });
+
+  // 神龛高度同步 → 实时动态面板
+  useEffect(() => {
+    const el = shrineRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setLiveH(el.offsetHeight));
+    ro.observe(el);
+    setLiveH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
 
   // ── 音乐播放器 ──────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -324,6 +341,13 @@ export default function Home({ targetSection }: HomeProps) {
     <div className="relative min-h-screen overflow-hidden text-foreground">
       {/* 氛围叠加：光晕 */}
       <div className="absolute inset-0 temple-noise" />
+
+      {/* 香火动画覆盖层 */}
+      {flashState && (
+        <div key={flashState.key} className="pointer-events-none absolute inset-0 z-[200] flex items-center justify-center">
+          <img src={flashState.src} alt="" className="action-flash h-64 w-auto object-contain" />
+        </div>
+      )}
 
       {/* UI Overlay */}
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-5 py-5">
@@ -569,7 +593,7 @@ export default function Home({ targetSection }: HomeProps) {
           {/* 右侧：实时动态 */}
           <aside className="absolute right-0 top-1/2 -translate-y-1/2">
             <DraggableCard id="live-panel" isUnlocked={isLayoutUnlocked} resizable>
-            <div className="temple-panel relative w-56 flex flex-col rounded-2xl overflow-hidden">
+            <div className="temple-panel relative w-56 flex flex-col rounded-2xl overflow-hidden" style={{ height: liveH }}>
               {/* 标题行 */}
               <div className="flex items-center justify-between px-3 pt-3 pb-2">
                 <span className="font-title text-base text-[var(--gold)]">实时动态</span>
@@ -594,11 +618,34 @@ export default function Home({ targetSection }: HomeProps) {
               {/* 分割线 */}
               <div className="mx-3 h-px bg-[var(--bronze-green)]/20" />
               {/* 内容区 */}
-              <div className="flex-1 min-h-[400px] overflow-y-auto px-3 py-3">
+              <div className="flex-1 overflow-y-auto px-3 py-3">
                 {liveTab === "activity" ? (
-                  <div className="flex h-full items-center justify-center">
-                    <span className="text-xs text-foreground/30">暂无修行动态</span>
-                  </div>
+                  state.activityLog.length === 0 ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-center pt-8">
+                      <span className="text-2xl opacity-30">🏯</span>
+                      <span className="text-xs text-foreground/30">尚未开始修行<br/>签到后动态将显示于此</span>
+                    </div>
+                  ) : (
+                    <div>
+                      {state.activityLog.map((entry, i) => (
+                        <div key={entry.id} className="flex gap-2.5">
+                          <div className="flex flex-col items-center" style={{ minWidth: 22 }}>
+                            <div className="text-base leading-none mt-0.5 shrink-0">{entry.icon}</div>
+                            {i < state.activityLog.length - 1 && (
+                              <div className="mt-1.5 flex-1 w-px bg-[var(--bronze-green)]/20" style={{ minHeight: 14 }} />
+                            )}
+                          </div>
+                          <div className="pb-3 min-w-0">
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-[10px] text-foreground/40 tabular-nums shrink-0">{entry.time}</span>
+                              <span className="text-xs font-medium text-foreground/85 leading-snug">{entry.action}</span>
+                            </div>
+                            <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">{entry.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 ) : (
                   <div className="flex h-full items-center justify-center">
                     <span className="text-xs text-foreground/30">聊天功能即将开放</span>
@@ -656,7 +703,7 @@ export default function Home({ targetSection }: HomeProps) {
               {/* 点香 */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => useIncenseCoin("点香")} aria-label="点香">
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => { useIncenseCoin("点香"); setFlashState({ src: incenseImg, key: Date.now() }); }} aria-label="点香">
                     <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--cinnabar)]/10 ring-1 ring-[var(--cinnabar)]/30 transition-all group-hover:bg-[var(--cinnabar)]/20 group-hover:ring-[var(--cinnabar)]/60 group-active:scale-95">
                       <Flame className="h-5 w-5 text-[var(--cinnabar)]" />
                     </div>
@@ -669,7 +716,7 @@ export default function Home({ targetSection }: HomeProps) {
               {/* 供奉 */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => useIncenseCoin("供奉")} aria-label="供奉">
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => { useIncenseCoin("供奉"); setFlashState({ src: gongfengImg, key: Date.now() }); }} aria-label="供奉">
                     <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--gold)]/10 ring-1 ring-[var(--gold)]/30 transition-all group-hover:bg-[var(--gold)]/20 group-hover:ring-[var(--gold)]/60 group-active:scale-95">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[var(--gold)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M5 12 Q5 4 12 4 Q19 4 19 12" /><line x1="3" y1="12" x2="21" y2="12" />
@@ -687,7 +734,7 @@ export default function Home({ targetSection }: HomeProps) {
               {/* 添香 */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => useIncenseCoin("添香")} aria-label="添香">
+                  <button className="flex flex-col items-center gap-1.5 group" onClick={() => { useIncenseCoin("添香"); setFlashState({ src: tianxiangImg, key: Date.now() }); }} aria-label="添香">
                     <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--bronze-green)]/10 ring-1 ring-[var(--bronze-green)]/30 transition-all group-hover:bg-[var(--bronze-green)]/20 group-hover:ring-[var(--bronze-green)]/60 group-active:scale-95">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[var(--bronze-green)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M8 8 Q7.5 6 8 4" /><path d="M12 7 Q11.5 5 12 3" /><path d="M16 8 Q15.5 6 16 4" />

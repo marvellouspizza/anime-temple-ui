@@ -8,16 +8,18 @@
   100% { opacity: 0;    transform: scale(1.1) translateY(-12px); }
 }
 
-.incense-flash {
+.incense-flash,
+.action-flash {
   animation: incense-flash 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   filter: drop-shadow(0 0 32px rgba(210, 140, 60, 0.5));
 }
 
 /* sonner toast 经验数字高亮 */
-[data-sonner-toaster] .exp-highlight {
+.exp-highlight {
   color: #d63031 !important;
   font-weight: 700 !important;
   font-size: 13px !important;
+  opacity: 1 !important;
 }
 
 @custom-variant dark (&:is(.dark *));
