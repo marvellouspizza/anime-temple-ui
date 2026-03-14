@@ -5,6 +5,7 @@ import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useWoodenFishSound } from "@/hooks/useWoodenFishSound";
+import { useBackgroundMusic } from "@/hooks/useBackgroundMusic";
 import Home from "@/pages/Home";
 
 // Use hash-based routing (/#/) to support opening index.html directly via file:// protocol
@@ -28,6 +29,7 @@ function AppRouter() {
 
 function App() {
   useWoodenFishSound();
+  useBackgroundMusic();
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
