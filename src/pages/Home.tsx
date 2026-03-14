@@ -10,6 +10,29 @@ import bgTempleImg from "@/assets/bg-temple.png";
 import pWoman from "@/assets/p-woman.png";
 import pMan from "@/assets/p-man.png";
 
+// 寺庙图片（eager 预加载，通过名称匹配查找）
+const _templeImageModules = import.meta.glob<string>("../assets/寺庙/*.png", {
+  eager: true,
+  import: "default",
+});
+function getTempleImage(name: string): string {
+  for (const [path, src] of Object.entries(_templeImageModules)) {
+    if (path.includes(name)) return src;
+  }
+  return bgTempleImg;
+}
+
+// 寺庙视频（eager 预加载）
+const _templeVideoModules = import.meta.glob<string>("../assets/寺庙视频/*.mp4", {
+  eager: true,
+  import: "default",
+});
+function getTempleVideo(name: string): string | null {
+  for (const [path, src] of Object.entries(_templeVideoModules)) {
+    if (path.includes(name)) return src;
+  }
+  return null;
+}
 import { useEffect, useRef, useState } from "react";
 import { DraggableCard } from "@/components/DraggableCard";
 
@@ -29,6 +52,7 @@ import {
   Landmark,
   Lock,
   MessageCircle,
+  Moon,
   Music2,
   Pause,
   Play,
@@ -37,6 +61,7 @@ import {
   SkipForward,
   Sparkles,
   Store,
+  Sun,
   Swords,
   Trophy,
   Unlock,
@@ -44,29 +69,16 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useGameState, TWELVE_TEMPLES } from "@/hooks/useGameState";
 
-// ── 成就数据 ────────────────────────────────────────────
-const ACHIEVEMENT_TEMPLES = [
-  { name: "清风禅寺", location: "灵山仙境 · 云雾林间", visitDate: "贞观三年 · 春分", level: "修行圣地" },
-  { name: "紫霞古刹", location: "紫霞峰顶 · 云海之上", visitDate: "贞观三年 · 秋分", level: "入定道场" },
-  { name: "莲华净院", location: "南海之滨 · 碧波荡漾", visitDate: "贞观四年 · 冬至", level: "禅定胜境" },
-  { name: "天台宗院", location: "天台山麓 · 松涛阵阵", visitDate: "贞观五年 · 夏至", level: "参悟道场" },
-];
-
-const ACHIEVEMENT_ZEN_QUOTES = [
-  { text: "菩提本无树，明镜亦非台。本来无一物，何处惹尘埃。", source: "六祖慧能", date: "贞观三年" },
-  { text: "不思善，不思恶，正恁么时，那个是明上座本来面目？", source: "五祖弘忍", date: "贞观三年" },
-  { text: "心无挂碍，无挂碍故，无有恐怖，远离颠倒梦想。", source: "《般若波罗蜜多心经》", date: "贞观四年" },
-  { text: "众里寻他千百度，蓦然回首，那人却在灯火阑珊处。", source: "灵境禅师", date: "贞观五年" },
-  { text: "日日是好日，时时是好时。", source: "云门文偃", date: "贞观五年" },
-];
-
-const ACHIEVEMENT_ENCOUNTER_COUNT = 47;
+// ── 成就面板 — 结缘记录静态数据 ─────────────────────────────
 const ACHIEVEMENT_ENCOUNTER_RECENT = [
-  { name: "空心小僧", time: "昨日午时", temple: "清风禅寺" },
-  { name: "悟尘行者", time: "三日前", temple: "紫霞古刹" },
-  { name: "慧光禅子", time: "七日前", temple: "莲华净院" },
+  { name: "空心小僧", time: "昨日午时", temple: "拉萨 · 雪寺" },
+  { name: "悟尘行者", time: "三日前",   temple: "云栖 · 竹影寺" },
+  { name: "慧光禅子", time: "七日前",   temple: "京都 · 山寺" },
 ];
+
 
 const TRACKS = [
   { title: "梵音禅境", artist: "古刹晨曲" },
@@ -113,11 +125,21 @@ function comingSoon(label: string) {
 export default function Home({ targetSection }: HomeProps) {
   void targetSection;
 
+  // 主题切换
+  const { theme, setTheme } = useTheme();
+
   // 布局解锁
   const [isLayoutUnlocked, setIsLayoutUnlocked] = useState(false);
 
+  // 游戏核心状态
+  const { state, expPercent, todayLoginAvailable, todayTaskAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame } = useGameState();
+
   // 寺庙概览
   const [showTempleOverview, setShowTempleOverview] = useState(false);
+  const [selectedTempleId, setSelectedTempleId] = useState<number | null>(null);
+
+  // 到此修行 — 神龛视频切换
+  const [immersiveTempleId, setImmersiveTempleId] = useState<number | null>(null);
 
   // 其他僧人
   const [showMonksPanel, setShowMonksPanel] = useState(false);
@@ -317,6 +339,17 @@ export default function Home({ targetSection }: HomeProps) {
               <span className="text-xs text-foreground/70">香火钱</span>
               <span className="text-xs font-semibold tabular-nums text-foreground">856</span>
             </div>
+            <button
+              className="temple-icon-btn h-8 w-8"
+              onClick={() => setTheme(theme === "dark" ? "warm" : "dark")}
+              aria-label="切换主题"
+              title={theme === "dark" ? "切换暖棕禅香主题" : "切换禅意深色主题"}
+            >
+              {theme === "dark"
+                ? <Sun className="h-4 w-4 text-[var(--bronze-green)]" />
+                : <Moon className="h-4 w-4 text-[var(--bronze-green)]" />
+              }
+            </button>
             <button
               className="temple-icon-btn h-8 w-8"
               onClick={() => comingSoon("设置")}
@@ -570,98 +603,155 @@ export default function Home({ targetSection }: HomeProps) {
       {/* 背景音乐 */}
       <audio ref={audioRef} loop />
 
-      {/* 寺庙概览 */}
+      {/* 寺庙概览 — 12座寺庙 */}
       {showTempleOverview && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowTempleOverview(false); }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowTempleOverview(false); setSelectedTempleId(null); } }}
         >
-          {/* 遮罩 */}
           <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
 
-          <div className="relative z-10 w-[720px] max-w-[94vw] temple-panel rounded-3xl overflow-hidden select-none">
+          <div className="relative z-10 w-[900px] max-w-[96vw] temple-panel rounded-3xl overflow-hidden select-none">
 
-            {/* ── 景色图 ─────────────────────────────── */}
-            <div className="relative h-72 overflow-hidden">
-              <img
-                src={bgTempleImg}
-                alt="寺庙景色"
-                className="w-full h-full object-cover object-center scale-105"
-              />
-              {/* 底部渐变过渡 */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-              {/* 右上关闭 */}
-              <button
-                className="absolute top-3 right-4 text-white/60 hover:text-white transition-colors text-2xl leading-none px-1"
-                onClick={() => setShowTempleOverview(false)}
-                aria-label="关闭"
-              >×</button>
-              {/* 图上文字 */}
-              <div className="absolute bottom-5 left-6 right-6 flex items-end justify-between">
-                <div>
-                  <div className="font-title text-5xl leading-none text-[var(--gold)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">清风禅寺</div>
-                  <div className="mt-1.5 text-sm text-white/75 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] tracking-widest">始建于大唐 · 贞观年间</div>
-                </div>
-                {/* 等级徽章 */}
-                <div className="temple-pill flex flex-col items-center gap-0.5 px-4 py-2">
-                  <span className="text-[10px] text-foreground/50 tracking-wider">寺庙等级</span>
-                  <span className="font-title text-xl text-[var(--gold)] leading-none">Lv. 7</span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── 信息区 ─────────────────────────────── */}
-            <div className="px-7 py-5">
-
-              {/* 三栏速览 */}
-              <div className="grid grid-cols-3 gap-3 mb-5">
-                {[
-                  { label: "建筑风格", value: "唐风禅意" },
-                  { label: "供奉神明", value: "观世音菩萨" },
-                  { label: "香火旺盛", value: "极旺 ★★★★★" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="temple-pill flex flex-col items-center gap-1 py-3">
-                    <span className="text-[11px] text-foreground/50 tracking-wider">{label}</span>
-                    <span className="font-title text-[15px] text-[var(--gold)] leading-none text-center">{value}</span>
+            {selectedTempleId !== null ? (() => {
+              // ── 单寺庙详情视图 ─────────────────────────
+              const temple = TWELVE_TEMPLES.find(t => t.id === selectedTempleId)!;
+              const isUnlocked = state.level >= temple.unlockLevel;
+              const templeImg = getTempleImage(temple.name);
+              return (
+                <>
+                  <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
+                    <img src={templeImg} alt={temple.name} className="absolute inset-0 w-full h-full object-cover object-center" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                    <button className="absolute top-3 left-4 grid h-7 w-7 place-items-center rounded-full bg-black/40 text-white/60 hover:text-white transition-colors"
+                      onClick={() => setSelectedTempleId(null)} aria-label="返回">
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button className="absolute top-3 right-4 text-white/60 hover:text-white transition-colors text-2xl leading-none px-1"
+                      onClick={() => { setShowTempleOverview(false); setSelectedTempleId(null); }} aria-label="关闭">×</button>
+                    {temple.isSpecial && (
+                      <div className="absolute top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-[var(--gold)]/20 ring-1 ring-[var(--gold)]/50 text-[11px] text-[var(--gold)] tracking-widest">
+                        ✦ 特典寺庙 ✦
+                      </div>
+                    )}
+                    <div className="absolute bottom-5 left-6 right-6 flex items-end justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="font-title text-4xl leading-none text-[var(--gold)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">{temple.name}</div>
+                        <div className="mt-1.5 text-sm text-white/70 tracking-widest">{temple.location}</div>
+                      </div>
+                      <div className="temple-pill flex flex-col items-center gap-0.5 px-4 py-2 shrink-0">
+                        <span className="text-[10px] text-foreground/50 tracking-wider">{temple.level}</span>
+                        <span className="font-title text-xl text-[var(--gold)] leading-none">Lv. {temple.unlockLevel}</span>
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
-
-              {/* 分割线 */}
-              <div className="h-px bg-[var(--bronze-green)]/20 mb-4" />
-
-              {/* 详情两栏 */}
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm mb-6">
-                {[
-                  { label: "所在地域", value: "灵山仙境 · 云雾林间" },
-                  { label: "镇寺法宝", value: "千叶莲花台" },
-                  { label: "法会特色", value: "每月初一十五 · 法会祈愿" },
-                  { label: "香客人数", value: "日均 1,280 人次" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex items-start gap-2">
-                    <span className="shrink-0 text-foreground/45 w-20">{label}</span>
-                    <span className="text-foreground/85">{value}</span>
+                  <div className="px-6 py-4">
+                    <p className="text-xs text-foreground/65 mb-4 leading-relaxed">{temple.desc}</p>
+                    {isUnlocked ? (
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        {[
+                          { label: "修行境界", value: temple.level },
+                          { label: "解锁等级", value: `Lv. ${temple.unlockLevel}` },
+                          { label: "香火状态", value: temple.incenseStatus },
+                        ].map(({ label, value }) => (
+                          <div key={label} className="temple-pill flex flex-col items-center gap-0.5 py-2.5">
+                            <span className="text-[10px] text-foreground/50 tracking-wider">{label}</span>
+                            <span className="font-title text-sm text-[var(--gold)] leading-none text-center">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="temple-pill flex items-center gap-3 px-4 py-3 mb-4">
+                        <Lock className="h-4 w-4 text-foreground/30 shrink-0" />
+                        <div>
+                          <div className="text-xs text-foreground/50">此寺庙尚未解锁</div>
+                          <div className="text-[10px] text-foreground/35 mt-0.5">需达到等级 {temple.unlockLevel}（当前 Lv.{state.level}）</div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-2">
+                      <button className="temple-ornate-btn px-4 py-1.5 text-xs" onClick={() => setSelectedTempleId(null)}>返回列表</button>
+                      <div className="flex gap-2">
+                        {isUnlocked && (
+                          <button
+                            className="temple-ornate-btn px-4 py-1.5 text-xs bg-[var(--cinnabar)]/20 ring-1 ring-[var(--cinnabar)]/50 text-[var(--cinnabar)] hover:bg-[var(--cinnabar)]/30"
+                            onClick={() => { setImmersiveTempleId(temple.id); setShowTempleOverview(false); setSelectedTempleId(null); }}
+                          >✦ 到此修行</button>
+                        )}
+                        <button className="temple-ornate-btn px-4 py-1.5 text-xs" onClick={() => { setShowTempleOverview(false); setSelectedTempleId(null); }}>关闭</button>
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </>
+              );
+            })() : (
+              // ── 12座寺庙列表视图 ──────────────────────
+              <>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--bronze-green)]/30">
+                  <div className="flex items-center gap-2">
+                    <Landmark className="h-4 w-4 text-[var(--cinnabar)]" />
+                    <span className="font-title text-xl text-[var(--gold)]">十二座寺庙</span>
+                    <span className="temple-pill px-2.5 py-0.5 text-xs text-[var(--gold)]">
+                      已解锁 {TWELVE_TEMPLES.filter(t => state.level >= t.unlockLevel).length} / {TWELVE_TEMPLES.length}
+                    </span>
+                  </div>
+                  <button className="text-foreground/40 hover:text-foreground transition-colors text-2xl leading-none px-1"
+                    onClick={() => setShowTempleOverview(false)} aria-label="关闭">×</button>
+                </div>
 
-              {/* 操作按钮 */}
-              <div className="flex justify-end gap-3">
-                <button
-                  className="temple-ornate-btn px-6 py-2 text-sm flex items-center gap-1.5"
-                  onClick={() => { setShowTempleOverview(false); comingSoon("寺庙升级"); }}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  升级寺庙
-                </button>
-                <button
-                  className="temple-ornate-btn px-6 py-2 text-sm"
-                  onClick={() => setShowTempleOverview(false)}
-                >
-                  关闭
-                </button>
-              </div>
-            </div>
+                <div className="px-6 pt-4 pb-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-foreground/50">修行进度</span>
+                    <span className="text-xs text-foreground/50">{TWELVE_TEMPLES.filter(t => state.level >= t.unlockLevel).length} / {TWELVE_TEMPLES.length} 座已解锁</span>
+                  </div>
+                  <Progress value={(TWELVE_TEMPLES.filter(t => state.level >= t.unlockLevel).length / TWELVE_TEMPLES.length) * 100} className="h-1.5 bg-foreground/10" />
+                </div>
+
+                <div className="px-5 pb-6 pt-3 grid grid-cols-4 gap-3 max-h-[500px] overflow-y-auto">
+                  {TWELVE_TEMPLES.map(temple => {
+                    const isUnlocked = state.level >= temple.unlockLevel;
+                    const img = getTempleImage(temple.name);
+                    return (
+                      <button
+                        key={temple.id}
+                        className={`relative rounded-2xl overflow-hidden transition-all group p-0 block aspect-square ${
+                          isUnlocked
+                            ? "hover:ring-2 hover:ring-[var(--gold)]/60 cursor-pointer"
+                            : "opacity-45 cursor-default"
+                        }`}
+                        onClick={() => isUnlocked && setSelectedTempleId(temple.id)}
+                        disabled={!isUnlocked}
+                        aria-label={isUnlocked ? `查看${temple.name}` : `${temple.name} - 未解锁`}
+                      >
+                        {isUnlocked ? (
+                          <img src={img} alt={temple.name}
+                            className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105" />
+                        ) : (
+                          <div className="absolute inset-0 bg-foreground/10 flex items-center justify-center">
+                            <Lock className="h-5 w-5 text-foreground/25" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/25" />
+                        <div className="absolute top-1.5 left-1.5 min-w-[18px] h-[18px] grid place-items-center rounded-full bg-black/55 text-[9px] text-white/70 px-1 font-title">
+                          {temple.id}
+                        </div>
+                        {temple.isSpecial && isUnlocked && (
+                          <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-[var(--gold)]/25 ring-1 ring-[var(--gold)]/50 text-[8px] text-[var(--gold)] leading-none">特典</div>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 px-2 pb-2 text-left">
+                          <div className={`font-title text-[11px] leading-tight truncate ${isUnlocked ? "text-[var(--gold)]" : "text-white/30"}`}>
+                            {isUnlocked ? temple.name : "???"}
+                          </div>
+                          <div className="text-[9px] text-white/50 leading-none mt-0.5 truncate">
+                            {isUnlocked ? temple.level : `Lv.${temple.unlockLevel} 解锁`}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -848,21 +938,26 @@ export default function Home({ targetSection }: HomeProps) {
             </div>
 
             {/* 顶部统计摘要 */}
-            <div className="grid grid-cols-3 gap-3 px-6 pt-4 pb-3">
-              {[
-                { icon: <Landmark className="h-4 w-4 text-[var(--cinnabar)]" />, label: "修行寺庙", value: ACHIEVEMENT_TEMPLES.length, unit: "座" },
-                { icon: <BookOpen className="h-4 w-4 text-[var(--gold)]" />, label: "获得禅语", value: ACHIEVEMENT_ZEN_QUOTES.length, unit: "则" },
-                { icon: <Heart className="h-4 w-4 text-[#e08080]" />, label: "结缘次数", value: ACHIEVEMENT_ENCOUNTER_COUNT, unit: "次" },
-              ].map(({ icon, label, value, unit }) => (
-                <div key={label} className="temple-pill flex items-center gap-3 px-4 py-3">
-                  {icon}
-                  <div>
-                    <div className="text-[10px] text-foreground/50 tracking-wider">{label}</div>
-                    <div className="font-title text-2xl leading-none text-[var(--gold)]">{value}<span className="text-sm ml-0.5 text-foreground/60">{unit}</span></div>
-                  </div>
+            {(() => {
+              const unlockedTemples = TWELVE_TEMPLES.filter(t => state.level >= t.unlockLevel);
+              return (
+                <div className="grid grid-cols-3 gap-3 px-6 pt-4 pb-3">
+                  {[
+                    { icon: <Landmark className="h-4 w-4 text-[var(--cinnabar)]" />, label: "修行寺庙", value: unlockedTemples.length, unit: "座" },
+                    { icon: <BookOpen className="h-4 w-4 text-[var(--gold)]" />, label: "获得禅语", value: unlockedTemples.length, unit: "则" },
+                    { icon: <Heart className="h-4 w-4 text-[#e08080]" />, label: "结缘次数", value: state.encounterCount, unit: "次" },
+                  ].map(({ icon, label, value, unit }) => (
+                    <div key={label} className="temple-pill flex items-center gap-3 px-4 py-3">
+                      {icon}
+                      <div>
+                        <div className="text-[10px] text-foreground/50 tracking-wider">{label}</div>
+                        <div className="font-title text-2xl leading-none text-[var(--gold)]">{value}<span className="text-sm ml-0.5 text-foreground/60">{unit}</span></div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
             {/* 标签栏 */}
             <div className="flex gap-1.5 px-6 pb-3">
@@ -891,43 +986,93 @@ export default function Home({ targetSection }: HomeProps) {
             <div className="px-6 py-4 max-h-[340px] overflow-y-auto">
 
               {/* ── 修行寺庙 ── */}
-              {achieveTab === "temples" && (
-                <div className="grid grid-cols-2 gap-3">
-                  {ACHIEVEMENT_TEMPLES.map((t, i) => (
-                    <div key={i} className="temple-pill flex items-start gap-3 px-4 py-3">
-                      <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--cinnabar)]/15 ring-1 ring-[var(--cinnabar)]/30">
-                        <Landmark className="h-4 w-4 text-[var(--cinnabar)]" />
+              {achieveTab === "temples" && (() => {
+                const unlockedTemples = TWELVE_TEMPLES.filter(t => state.level >= t.unlockLevel);
+                const lockedTemples   = TWELVE_TEMPLES.filter(t => state.level < t.unlockLevel);
+                return (
+                  <div className="space-y-4">
+                    {unlockedTemples.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {unlockedTemples.map(t => {
+                          const img = getTempleImage(t.name);
+                          return (
+                            <div key={t.id} className="temple-pill overflow-hidden">
+                              <div className="relative w-full overflow-hidden" style={{ aspectRatio: "21/9" }}>
+                                <img src={img} alt={t.name} className="w-full h-full object-cover object-center" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
+                                {t.isSpecial && (
+                                  <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-[var(--gold)]/25 ring-1 ring-[var(--gold)]/50 text-[9px] text-[var(--gold)] leading-none">特典</div>
+                                )}
+                                <div className="absolute bottom-1.5 left-2.5 right-2.5 flex items-end justify-between">
+                                  <span className="font-title text-sm text-[var(--gold)] drop-shadow leading-none">{t.name}</span>
+                                  <span className="text-[9px] text-white/55">{t.incenseStatus}</span>
+                                </div>
+                              </div>
+                              <div className="px-3 py-2">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className="rounded bg-[var(--bronze-green)]/15 px-1.5 py-0.5 text-[9px] text-[var(--bronze-green)] ring-1 ring-[var(--bronze-green)]/20">{t.level}</span>
+                                  <span className="text-[9px] text-foreground/40">{t.location}</span>
+                                </div>
+                                <p className="text-[10px] text-foreground/55 leading-relaxed line-clamp-2">{t.desc}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="min-w-0">
-                        <div className="font-title text-base text-[var(--gold)] leading-none">{t.name}</div>
-                        <div className="mt-0.5 text-[10px] text-foreground/50">{t.location}</div>
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <span className="rounded bg-[var(--bronze-green)]/15 px-1.5 py-0.5 text-[9px] text-[var(--bronze-green)] ring-1 ring-[var(--bronze-green)]/20">{t.level}</span>
-                          <span className="text-[9px] text-foreground/40">{t.visitDate}</span>
+                    )}
+                    {lockedTemples.length > 0 && (
+                      <div>
+                        <div className="mb-2 text-[10px] text-foreground/35 tracking-wider pl-0.5">— 尚待解锁 —</div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {lockedTemples.map(t => (
+                            <div key={t.id} className="temple-pill flex flex-col items-center gap-1 py-3 opacity-40">
+                              <Lock className="h-4 w-4 text-foreground/30" />
+                              <span className="text-[9px] text-foreground/35">Lv.{t.unlockLevel}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ── 禅语集 ── */}
-              {achieveTab === "zen" && (
-                <div className="space-y-3">
-                  {ACHIEVEMENT_ZEN_QUOTES.map((q, i) => (
-                    <div key={i} className="temple-pill px-4 py-3">
-                      <div className="flex items-start gap-2">
-                        <BookOpen className="h-3.5 w-3.5 mt-0.5 shrink-0 text-[var(--gold)]/60" />
-                        <p className="text-sm text-foreground/85 leading-relaxed">{q.text}</p>
+              {achieveTab === "zen" && (() => {
+                const unlockedTemples = TWELVE_TEMPLES.filter(t => state.level >= t.unlockLevel);
+                const lockedCount     = TWELVE_TEMPLES.filter(t => state.level < t.unlockLevel).length;
+                return (
+                  <div className="space-y-3">
+                    {unlockedTemples.map(t => {
+                      const img = getTempleImage(t.name);
+                      return (
+                        <div key={t.id} className="temple-pill flex gap-3 overflow-hidden">
+                          <div className="relative shrink-0 w-16 overflow-hidden rounded-xl" style={{ aspectRatio: "1/1" }}>
+                            <img src={img} alt={t.name} className="w-full h-full object-cover object-center" />
+                            <div className="absolute inset-0 bg-black/30" />
+                          </div>
+                          <div className="flex-1 min-w-0 py-2 pr-3">
+                            <div className="flex items-baseline gap-1.5 mb-1.5">
+                              <span className="font-title text-sm text-[var(--gold)] leading-none">{t.name}</span>
+                              {t.isSpecial && <span className="text-[9px] text-[var(--gold)]/60">特典</span>}
+                            </div>
+                            <div className="flex items-start gap-1.5">
+                              <BookOpen className="h-3 w-3 mt-0.5 shrink-0 text-[var(--gold)]/50" />
+                              <p className="text-xs text-foreground/80 leading-relaxed">{t.zenQuote}</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {lockedCount > 0 && (
+                      <div className="temple-pill flex items-center gap-2 px-4 py-3 opacity-50">
+                        <Lock className="h-3.5 w-3.5 text-foreground/30 shrink-0" />
+                        <span className="text-xs text-foreground/45">还有 {lockedCount} 则禅语等待解锁……</span>
                       </div>
-                      <div className="mt-2 flex items-center justify-between pl-5">
-                        <span className="text-[10px] text-foreground/50">—— {q.source}</span>
-                        <span className="text-[9px] text-foreground/30">{q.date}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ── 结缘记录 ── */}
               {achieveTab === "encounter" && (
@@ -935,7 +1080,7 @@ export default function Home({ targetSection }: HomeProps) {
                   <div className="temple-pill flex items-center justify-center gap-4 py-5">
                     <Heart className="h-8 w-8 text-[#e08080]" />
                     <div className="text-center">
-                      <div className="font-title text-5xl leading-none text-[var(--gold)]">{ACHIEVEMENT_ENCOUNTER_COUNT}</div>
+                      <div className="font-title text-5xl leading-none text-[var(--gold)]">{state.encounterCount}</div>
                       <div className="mt-1 text-xs text-foreground/50">累计与陌生小僧结缘次数</div>
                     </div>
                   </div>

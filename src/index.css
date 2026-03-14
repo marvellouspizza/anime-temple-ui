@@ -180,7 +180,7 @@ html, body {
 /* ── 暖棕主题下的组件覆盖（去除硬编码绿色值）── */
 .warm .temple-noise {
   background-image:
-    radial-gradient(1200px 700px at 50% 20%, oklch(59.535% 0.14779 49.911 / 0.67)t 60%),
+    radial-gradient(1200px 700px at 50% 20%, oklch(59.535% 0.14779 49.911 / 0.67), transparent 60%),
     radial-gradient(900px 500px at 20% 80%, oklch(40.34% 0.10442 47.723 / 0.701), transparent 55%),
     radial-gradient(700px 500px at 85% 75%, oklch(33.67% 0.10777 33.315 / 0.561), transparent 60%);
 }
