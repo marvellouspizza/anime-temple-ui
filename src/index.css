@@ -13,6 +13,13 @@
   filter: drop-shadow(0 0 32px rgba(210, 140, 60, 0.5));
 }
 
+/* sonner toast 经验数字高亮 */
+[data-sonner-toaster] .exp-highlight {
+  color: #d63031 !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /* ── 等比缩放：固定 1440px 设计稿宽度，随视口等比缩放 ── */

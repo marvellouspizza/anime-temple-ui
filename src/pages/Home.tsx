@@ -81,11 +81,36 @@ const ACHIEVEMENT_ENCOUNTER_RECENT = [
 ];
 
 
-const TRACKS = [
-  { title: "梵音禅境", artist: "古刹晨曲" },
-  { title: "晨钟暮鼓", artist: "禅意山水" },
-  { title: "古刹清风", artist: "净土悠然" },
-];
+// 从 songs 目录加载真实音乐文件（Vite glob）
+const _songModules = import.meta.glob<string>("/src/assets/songs/*.mp3", {
+  eager: true,
+  query: "?url",
+  import: "default",
+});
+
+// 文件名 → 五字中文曲名 / 艺术家
+const SONG_META: Record<string, { title: string; artist: string }> = {
+  "1996":                                    { title: "千禧梵音曲", artist: "岁月禅声" },
+  "serce polska - Nunu":                     { title: "波兰心弦吟", artist: "Nunu" },
+  "森林摇篮曲":                              { title: "森林摇篮曲", artist: "自然禅音" },
+  "用于风景、冥想、瑜伽、禅宗的平静钢琴音乐": { title: "静心钢琴曲", artist: "禅意山水" },
+};
+
+function parseSongName(path: string): { title: string; artist: string } {
+  const filename = path.split("/").pop()?.replace(/\.mp3$/i, "") ?? "";
+  if (SONG_META[filename]) return SONG_META[filename];
+  const dashIdx = filename.lastIndexOf(" - ");
+  if (dashIdx !== -1) {
+    return { title: filename.slice(0, dashIdx), artist: filename.slice(dashIdx + 3) };
+  }
+  return { title: filename.slice(0, 5), artist: "禅境" };
+}
+
+const TRACKS: { url: string; title: string; artist: string }[] =
+  Object.keys(_songModules).sort().map((path) => ({
+    url: _songModules[path],
+    ...parseSongName(path),
+  }));
 
 // ── 今日在寺僧人 ─────────────────────────────────────────
 const MONKS = [
@@ -164,6 +189,7 @@ export default function Home({ targetSection }: HomeProps) {
 
   // ── 音乐播放器 ──────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement>(null);
+  const pendingPlayRef = useRef(false); // 歌曲自然结束后跳轨时继续播放
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -184,6 +210,7 @@ export default function Home({ targetSection }: HomeProps) {
   function prevTrack() {
     const audio = audioRef.current;
     if (audio) { audio.pause(); audio.currentTime = 0; }
+    pendingPlayRef.current = false;
     setTrackIdx(i => (i - 1 + TRACKS.length) % TRACKS.length);
     setProgress(0);
     setIsPlaying(false);
@@ -192,6 +219,7 @@ export default function Home({ targetSection }: HomeProps) {
   function nextTrack() {
     const audio = audioRef.current;
     if (audio) { audio.pause(); audio.currentTime = 0; }
+    pendingPlayRef.current = false;
     setTrackIdx(i => (i + 1) % TRACKS.length);
     setProgress(0);
     setIsPlaying(false);
@@ -249,20 +277,48 @@ export default function Home({ targetSection }: HomeProps) {
     };
   }, []);
 
+  // 初始化：加载第一首、注册事件、尝试自动播放
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || TRACKS.length === 0) return;
+    audio.volume = 0.35;
+    audio.src = TRACKS[0].url;
+    audio.load();
     const onTimeUpdate = () => {
       if (audio.duration) setProgress((audio.currentTime / audio.duration) * 100);
     };
-    const onEnded = () => nextTrack();
+    const onEnded = () => {
+      // 自然结束 → 跳下一首并继续播
+      pendingPlayRef.current = true;
+      setProgress(0);
+      setTrackIdx(prev => (prev + 1) % TRACKS.length);
+    };
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
+    // 尝试自动播放，被拦截则等待首次点击
+    audio.play().then(() => setIsPlaying(true)).catch(() => {
+      window.addEventListener("click", () => {
+        audioRef.current?.play().then(() => setIsPlaying(true)).catch(() => {});
+      }, { once: true });
+    });
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 切换曲目时更新 src；若是自然跳轨则自动继续播
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !TRACKS[trackIdx]?.url) return;
+    audio.src = TRACKS[trackIdx].url;
+    audio.load();
+    if (pendingPlayRef.current) {
+      pendingPlayRef.current = false;
+      audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }
+  }, [trackIdx]);
 
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
@@ -687,7 +743,7 @@ export default function Home({ targetSection }: HomeProps) {
       </div>
 
       {/* 背景音乐 */}
-      <audio ref={audioRef} loop />
+      <audio ref={audioRef} />
 
       {/* 寺庙概览 — 12座寺庙 */}
       {showTempleOverview && (

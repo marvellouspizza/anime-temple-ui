@@ -322,7 +322,7 @@ export function useGameState() {
     });
     toast.success(`${action}祈愿`, {
       description: React.createElement(
-        'span', { style: { color: 'var(--cinnabar)', fontWeight: '700' } },
+        'span', { className: 'exp-highlight' },
         `经验 +${exp}`
       )
     });
