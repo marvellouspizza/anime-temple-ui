@@ -1181,28 +1181,21 @@ export default function Home({ targetSection }: HomeProps) {
                 return (
                   <div className="space-y-4">
                     {unlockedTemples.length > 0 && (
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
                         {unlockedTemples.map(t => {
                           const img = getTempleImage(t.name);
                           return (
-                            <div key={t.id} className="temple-pill overflow-hidden">
-                              <div className="relative w-full overflow-hidden" style={{ aspectRatio: "21/9" }}>
+                            <div key={t.id} className="temple-pill overflow-hidden rounded-2xl">
+                              <div className="relative w-full aspect-square overflow-hidden">
                                 <img src={img} alt={t.name} className="w-full h-full object-cover object-center" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
                                 {t.isSpecial && (
                                   <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-[var(--gold)]/25 ring-1 ring-[var(--gold)]/50 text-[9px] text-[var(--gold)] leading-none">特典</div>
                                 )}
-                                <div className="absolute bottom-1.5 left-2.5 right-2.5 flex items-end justify-between">
-                                  <span className="font-title text-sm text-[var(--gold)] drop-shadow leading-none">{t.name}</span>
-                                  <span className="text-[9px] text-white/55">{t.incenseStatus}</span>
+                                <div className="absolute bottom-0 left-0 right-0 px-2.5 pb-2">
+                                  <span className="font-title text-xs text-[var(--gold)] drop-shadow leading-none block mb-0.5">{t.name}</span>
+                                  <span className="text-[9px] text-white/50 block">{t.level}</span>
                                 </div>
-                              </div>
-                              <div className="px-3 py-2">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="rounded bg-[var(--bronze-green)]/15 px-1.5 py-0.5 text-[9px] text-[var(--bronze-green)] ring-1 ring-[var(--bronze-green)]/20">{t.level}</span>
-                                  <span className="text-[9px] text-foreground/40">{t.location}</span>
-                                </div>
-                                <p className="text-[10px] text-foreground/55 leading-relaxed line-clamp-2">{t.desc}</p>
                               </div>
                             </div>
                           );
