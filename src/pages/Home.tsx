@@ -57,6 +57,7 @@ import {
   Heart,
   Landmark,
   Lock,
+  LogOut,
   MessageCircle,
   Moon,
   Music2,
@@ -68,6 +69,7 @@ import {
   SkipForward,
   Sparkles,
   Store,
+  Rocket,
   Sun,
   Swords,
   Trophy,
@@ -191,7 +193,7 @@ export default function Home({ targetSection }: HomeProps) {
   const supabaseUserId = chatState.supabaseUserId;
 
   // 游戏核心状态
-  const { state, expPercent, todayLoginAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame, doRegister, setCurrentTempleId, acknowledgeUnlock, acknowledgeReward, isCloudLoading, setNearbyPlayerNames, tapMerit } = useGameState(supabaseUserId);
+  const { state, expPercent, todayLoginAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame, speedRun, doRegister, setCurrentTempleId, acknowledgeUnlock, acknowledgeReward, isCloudLoading, setNearbyPlayerNames, tapMerit } = useGameState(supabaseUserId);
 
   // 寺庙概览
   const [showTempleOverview, setShowTempleOverview] = useState(false);
@@ -536,34 +538,6 @@ export default function Home({ targetSection }: HomeProps) {
 
       {/* UI Overlay */}
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-5 py-5">
-        {/* ── 解锁布局按钮（顶部中央浮动）── */}
-        <div className="absolute left-1/2 top-3 z-50 -translate-x-1/2">
-          <button
-            onClick={() => {
-              const next = !isLayoutUnlocked;
-              setIsLayoutUnlocked(next);
-              if (next) {
-                toast.message("布局已解锁", { description: "拖拽卡片移动位置，右下角拖动可缩放，松手自动保存" });
-              } else {
-                toast.success("布局已锁定");
-              }
-            }}
-            className="temple-pill flex items-center gap-2 px-4 py-1.5 text-sm font-medium transition-all hover:ring-1 hover:ring-[var(--gold)]/60 active:scale-95"
-          >
-            {isLayoutUnlocked ? (
-              <>
-                <Unlock className="h-3.5 w-3.5 text-[var(--cinnabar)]" />
-                <span className="text-[var(--cinnabar)]">锁定布局</span>
-              </>
-            ) : (
-              <>
-                <Lock className="h-3.5 w-3.5 text-[var(--bronze-green)]" />
-                <span className="text-foreground/70">解锁布局</span>
-              </>
-            )}
-          </button>
-        </div>
-
         {/* 顶部行：左侧 HUD + 右侧入口 */}
         <div className="flex items-start justify-between">
         <DraggableCard id="hud" isUnlocked={isLayoutUnlocked}>
@@ -1797,6 +1771,32 @@ export default function Home({ targetSection }: HomeProps) {
                 onClick={() => setShowSettingsPanel(false)} aria-label="关闭">×</button>
             </div>
             <div className="px-6 py-5 space-y-3">
+              {/* 调整布局 */}
+              <div className="temple-pill flex items-center justify-between px-4 py-3">
+                <div>
+                  <div className="text-sm font-medium text-foreground/85">调整布局</div>
+                  <div className="text-[10px] text-foreground/50 mt-0.5">{isLayoutUnlocked ? "拖拽卡片移动，右下角缩放" : "解锁后可拖拽调整卡片位置"}</div>
+                </div>
+                <button
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] border transition-colors ${
+                    isLayoutUnlocked
+                      ? "text-[var(--cinnabar)] border-[var(--cinnabar)]/40"
+                      : "text-foreground/40 hover:text-[var(--bronze-green)] border-foreground/15 hover:border-[var(--bronze-green)]/40"
+                  }`}
+                  onClick={() => {
+                    const next = !isLayoutUnlocked;
+                    setIsLayoutUnlocked(next);
+                    setShowSettingsPanel(false);
+                    if (next) {
+                      toast.message("布局已解锁", { description: "拖拽卡片移动位置，右下角拖动可缩放，松手自动保存" });
+                    } else {
+                      toast.success("布局已锁定");
+                    }
+                  }}
+                >
+                  {isLayoutUnlocked ? <><Unlock className="h-3 w-3" />锁定</> : <><Lock className="h-3 w-3" />解锁</>}
+                </button>
+              </div>
               {/* 重置修行 */}
               <div className="temple-pill flex items-center justify-between px-4 py-3">
                 <div>
@@ -1810,6 +1810,34 @@ export default function Home({ targetSection }: HomeProps) {
                   <RotateCcw className="h-3 w-3" />重置
                 </button>
               </div>
+              {/* 速通模式 */}
+              <div className="temple-pill flex items-center justify-between px-4 py-3">
+                <div>
+                  <div className="text-sm font-medium text-foreground/85">速通模式</div>
+                  <div className="text-[10px] text-foreground/50 mt-0.5">香火钱加满 9999</div>
+                </div>
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] text-foreground/40 hover:text-[var(--bronze-green)] border border-foreground/15 hover:border-[var(--bronze-green)]/40 transition-colors"
+                  onClick={() => { speedRun(); setShowSettingsPanel(false); }}
+                >
+                  <Rocket className="h-3 w-3" />加满
+                </button>
+              </div>
+              {/* 退出登录 */}
+              {chatState.authState === "authed" && (
+                <div className="temple-pill flex items-center justify-between px-4 py-3">
+                  <div>
+                    <div className="text-sm font-medium text-foreground/85">退出登录</div>
+                    <div className="text-[10px] text-foreground/50 mt-0.5">退出 Second Me 账号</div>
+                  </div>
+                  <button
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] text-foreground/40 hover:text-[var(--cinnabar)] border border-foreground/15 hover:border-[var(--cinnabar)]/40 transition-colors"
+                    onClick={() => { chatState.logout(); setShowSettingsPanel(false); }}
+                  >
+                    <LogOut className="h-3 w-3" />退出
+                  </button>
+                </div>
+              )}
               <div className="flex justify-end pt-1">
                 <button className="temple-ornate-btn px-5 py-2 text-sm" onClick={() => setShowSettingsPanel(false)}>关闭</button>
               </div>

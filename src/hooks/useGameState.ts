@@ -856,6 +856,16 @@ export function useGameState(userId: string | null = null) {
     toast.success("修行已重置", { description: "一切归零，重新修行" });
   }, [persistStateNow, userId]);
 
+  /** 速通：香火钱加满 9999 */
+  const speedRun = useCallback(() => {
+    setState(prev => {
+      const ns = { ...prev, incenseCoin: 9999 };
+      persistStateNow(ns);
+      return ns;
+    });
+    toast.success("速通模式", { description: "香火钱已加满 9999" });
+  }, [persistStateNow]);
+
   /** 确认解锁（关闭新寺庙解锁弹窗） */
   const acknowledgeUnlock = useCallback((templeId: number) => {
     setState(prev => ({
@@ -894,6 +904,7 @@ export function useGameState(userId: string | null = null) {
     useIncenseCoin,
     doRegister,
     resetGame,
+    speedRun,
     acknowledgeUnlock,
     acknowledgeReward,
     setCurrentTempleId: (id: number) => setState(prev => ({ ...prev, currentTempleId: id })),
