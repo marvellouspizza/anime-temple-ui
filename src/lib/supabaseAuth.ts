@@ -45,8 +45,10 @@ export async function ensureSupabaseSession(
     const {
       data: { session },
     } = await supabase.auth.getSession();
+    console.log("[Auth] 现有 session:", session?.user?.email ?? "无");
     if (session?.user) {
       if (session.user.email === email) {
+        console.log("[Auth] 复用现有 session, uid =", session.user.id);
         return session.user.id;
       }
       // 不是同一账号，登出后重新登录
@@ -58,8 +60,10 @@ export async function ensureSupabaseSession(
       await supabase.auth.signInWithPassword({ email, password });
 
     if (!signInError && signInData.user) {
+      console.log("[Auth] 密码登录成功, uid =", signInData.user.id);
       return signInData.user.id;
     }
+    console.warn("[Auth] 密码登录失败:", signInError?.message);
 
     // 3. 首次进入：注册新账号
     const { data: signUpData, error: signUpError } =

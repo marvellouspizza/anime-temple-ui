@@ -53,6 +53,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  EyeOff,
   Flame,
   Heart,
   Landmark,
@@ -80,6 +81,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useGameState, TWELVE_TEMPLES, INCENSE_ACTIONS } from "@/hooks/useGameState";
 import { useSecondMeChat } from "@/hooks/useSecondMeChat";
 import { SecondMeChat, LoginPanel } from "@/components/SecondMeChat";
+import { useTemplePresence } from "@/hooks/useTemplePresence";
+import type { PresenceMonk } from "@/hooks/useTemplePresence";
 
 
 
@@ -114,27 +117,7 @@ const TRACKS: { url: string; title: string; artist: string }[] =
     ...parseSongName(path),
   }));
 
-// ── 今日在寺僧人 ─────────────────────────────────────────
-const MONKS = [
-  {
-    id: "yunhe",
-    name: "云鹤",
-    level: 8,
-    title: "苦修居士",
-    avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=256&q=60",
-    avatarFallback: "云",
-    status: "打坐冥想",
-    statusDesc: "禅堂 · 静心修炼中",
-    merit: 42800,
-    logs: [
-      { time: "06:30", icon: "📿", action: "晨课诵经", desc: "诵《心经》108遍，功德+12" },
-      { time: "08:00", icon: "🙏", action: "虔诚祈福", desc: "为施主超度亡灵，善缘+1" },
-      { time: "10:30", icon: "🧘", action: "静心打坐", desc: "禅堂修炼，进入三禅定境" },
-      { time: "14:00", icon: "🍵", action: "烹制药茗", desc: "为寺庙准备午后药茶" },
-      { time: "16:00", icon: "📖", action: "研习佛法", desc: "阅《楞严经》，悟性+3" },
-    ],
-  },
-];
+
 
 function formatMerit(v: number): string {
   if (v < 10000) return v.toLocaleString("zh-CN");
@@ -179,7 +162,7 @@ export default function Home({ targetSection }: HomeProps) {
   const supabaseUserId = chatState.supabaseUserId;
 
   // 游戏核心状态
-  const { state, expPercent, todayLoginAvailable, todayTaskAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame, doRegister, setCurrentTempleId, acknowledgeUnlock, isCloudLoading } = useGameState(supabaseUserId);
+  const { state, expPercent, todayLoginAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame, doRegister, setCurrentTempleId, acknowledgeUnlock, acknowledgeReward, isCloudLoading, setNearbyPlayerNames } = useGameState(supabaseUserId);
 
   // 寺庙概览
   const [showTempleOverview, setShowTempleOverview] = useState(false);
@@ -198,6 +181,47 @@ export default function Home({ targetSection }: HomeProps) {
   // 成就面板
   const [showAchievement, setShowAchievement] = useState(false);
   const [achieveTab, setAchieveTab] = useState<"temples" | "zen" | "encounter" | "relics">("temples");
+
+  // 隐藏控制
+  const [hideOtherMonks, setHideOtherMonks] = useState(false);
+  const [hideCharacter, setHideCharacter] = useState(false);
+
+  // Realtime Presence — 同寺庙在线玩家
+  const currentTemple = TWELVE_TEMPLES.find(t => t.id === (immersiveTempleId ?? state.currentTempleId)) ?? TWELVE_TEMPLES[0];
+  const presenceSelf = supabaseUserId && state.profile ? {
+    userId: supabaseUserId,
+    name: state.profile.name,
+    avatarUrl: state.profile.avatarUrl,
+    level: state.level,
+    merit: state.merit,
+    currentTempleId: immersiveTempleId ?? state.currentTempleId,
+    personality: state.profile.personality,
+    trainingStyle: state.profile.trainingStyle,
+  } : null;
+  const { nearbyMonks } = useTemplePresence(presenceSelf);
+
+  // 同步在线玩家名到 useGameState（供 AI 日志交友使用）
+  useEffect(() => {
+    setNearbyPlayerNames(nearbyMonks.map(m => m.name));
+  }, [nearbyMonks, setNearbyPlayerNames]);
+
+  // AI 自动结缘：当检测到附近有其他玩家时自动触发
+  const autoEncounterFiredRef = useRef(false);
+  useEffect(() => {
+    if (
+      nearbyMonks.length > 0 &&
+      !state.dailyTaskDone &&
+      state.dailyLoginDone &&
+      !autoEncounterFiredRef.current
+    ) {
+      autoEncounterFiredRef.current = true;
+      doMorningTask();
+    }
+    // 新的一天重置标记
+    if (!state.dailyLoginDone) {
+      autoEncounterFiredRef.current = false;
+    }
+  }, [nearbyMonks, state.dailyTaskDone, state.dailyLoginDone, doMorningTask]);
 
   // 实时动态
   const [liveTab, setLiveTab] = useState<"activity" | "chat">("activity");
@@ -250,20 +274,22 @@ export default function Home({ targetSection }: HomeProps) {
 
   function prevTrack() {
     const audio = audioRef.current;
+    const wasPlaying = isPlaying;
     if (audio) { audio.pause(); audio.currentTime = 0; }
-    pendingPlayRef.current = false;
+    pendingPlayRef.current = wasPlaying;
     setTrackIdx(i => (i - 1 + TRACKS.length) % TRACKS.length);
     setProgress(0);
-    setIsPlaying(false);
+    if (!wasPlaying) setIsPlaying(false);
   }
 
   function nextTrack() {
     const audio = audioRef.current;
+    const wasPlaying = isPlaying;
     if (audio) { audio.pause(); audio.currentTime = 0; }
-    pendingPlayRef.current = false;
+    pendingPlayRef.current = wasPlaying;
     setTrackIdx(i => (i + 1) % TRACKS.length);
     setProgress(0);
-    setIsPlaying(false);
+    if (!wasPlaying) setIsPlaying(false);
   }
 
   function toggleMute() {
@@ -379,8 +405,26 @@ export default function Home({ targetSection }: HomeProps) {
         </div>
       )}
 
-      {/* 首次注册卡片：感应完成后无档案时显示 */}
-      {chatState.authState === "authed" && !state.profile && !isCloudLoading && <RegisterCard onRegister={doRegister} />}
+      {/* 首次注册卡片：必须有 supabaseUserId（否则保存不了档案） */}
+      {chatState.authState === "authed" && chatState.supabaseUserId && !state.profile && !isCloudLoading && <RegisterCard onRegister={doRegister} />}
+
+      {/* 云端连接失败：有认证但无 supabaseUserId */}
+      {chatState.authState === "authed" && !chatState.supabaseUserId && !isCloudLoading && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+          <div className="relative z-10 temple-panel rounded-3xl p-8 text-center max-w-[400px]">
+            <div className="text-4xl mb-4">🔗</div>
+            <div className="font-title text-2xl text-[var(--gold-deep)] mb-3">云端连接失败</div>
+            <p className="text-sm text-foreground/60 mb-6">修行数据无法同步，请检查网络后重试</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold)] to-[var(--gold-deep)] text-white font-title text-sm shadow-lg hover:brightness-110 transition"
+            >
+              刷新重试
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 强制 SecondMe 登录全屏遮罩 */}
       {chatState.authState !== "authed" && (
@@ -672,6 +716,7 @@ export default function Home({ targetSection }: HomeProps) {
               )}
             </AnimatePresence>
             {/* 角色立绘 — 调整大小改 h-[72%]，位置改 bottom-0 left-[30%] */}
+            {!hideCharacter && (
             <img
               ref={charRef}
               src={state.profile?.gender === "男" ? pMan : pWoman}
@@ -680,8 +725,9 @@ export default function Home({ targetSection }: HomeProps) {
               className={`pointer-events-auto absolute bottom-0 h-[72%] w-auto cursor-grab object-contain object-bottom drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)] select-none active:cursor-grabbing${charX === null ? " left-[30%]" : ""}`}
               style={charX !== null ? { left: charX } : undefined}
             />
-            {/* 其他僧人（测试显示） */}
-            {MONKS.map((monk, idx) => (
+            )}
+            {/* 同寺庙在线玩家头像 */}
+            {!hideOtherMonks && nearbyMonks.map((monk, idx) => (
               <div
                 key={monk.id}
                 className="pointer-events-auto absolute flex flex-col items-center gap-1 cursor-pointer transition-transform hover:scale-110 drop-shadow-md"
@@ -700,6 +746,23 @@ export default function Home({ targetSection }: HomeProps) {
                 </div>
               </div>
             ))}
+            {/* 神龛右上角工具栏：隐藏小僧 / 隐藏角色 */}
+            <div className="pointer-events-auto absolute top-3 right-3 flex gap-1.5">
+              <button
+                onClick={() => setHideOtherMonks(h => !h)}
+                className="grid h-8 w-8 place-items-center rounded-full bg-black/40 text-white/60 hover:text-white hover:bg-black/60 transition-all"
+                title={hideOtherMonks ? "显示其他小僧" : "隐藏其他小僧"}
+              >
+                {hideOtherMonks ? <EyeOff className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => setHideCharacter(h => !h)}
+                className="grid h-8 w-8 place-items-center rounded-full bg-black/40 text-white/60 hover:text-white hover:bg-black/60 transition-all"
+                title={hideCharacter ? "显示角色" : "隐藏角色"}
+              >
+                {hideCharacter ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
           </div>
           </DraggableCard>
 
@@ -730,6 +793,12 @@ export default function Home({ targetSection }: HomeProps) {
               </div>
               {/* 分割线 */}
               <div className="mx-3 h-px bg-[var(--bronze-green)]/20" />
+              {/* 描述区 */}
+              {liveTab === "chat" && (
+                <p className="px-3 pt-2 pb-1 text-[10px] text-foreground/40 leading-relaxed">
+                  您可以发消息与您的 AI 小僧聊天
+                </p>
+              )}
               {/* 内容区 */}
               <div className="flex-1 overflow-y-auto px-3 py-3">
                 {liveTab === "activity" ? (
@@ -760,7 +829,14 @@ export default function Home({ targetSection }: HomeProps) {
                     </div>
                   )
                 ) : (
-                  <SecondMeChat chatState={chatState} />
+                  <SecondMeChat
+                    chatState={chatState}
+                    currentTemple={currentTemple}
+                    nearbyMonks={nearbyMonks}
+                    profile={state.profile}
+                    merit={state.merit}
+                    encounterCount={state.encounterCount}
+                  />
                 )}
               </div>
             </div>
@@ -857,25 +933,6 @@ export default function Home({ targetSection }: HomeProps) {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top"><p className="text-xs">添香 · 消耗 {INCENSE_ACTIONS.添香.cost} 香火钱，经验 +{INCENSE_ACTIONS.添香.exp}</p></TooltipContent>
-              </Tooltip>
-
-              <div className="h-8 w-px bg-[var(--bronze-green)]/20 mb-4" />
-
-              {/* 结缘 */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="flex flex-col items-center gap-1.5 group" onClick={doMorningTask} aria-label="结缘任务">
-                    <div className={`grid h-11 w-11 place-items-center rounded-full transition-all group-active:scale-95 ${
-                      todayTaskAvailable
-                        ? "bg-[var(--gold)]/10 ring-1 ring-[var(--gold)]/50 group-hover:bg-[var(--gold)]/20 group-hover:ring-[var(--gold)]/80"
-                        : "bg-foreground/5 ring-1 ring-foreground/15"
-                    }`}>
-                      <Users className={`h-5 w-5 ${todayTaskAvailable ? "text-[var(--gold)]" : "text-foreground/30"}`} />
-                    </div>
-                    <span className={`text-[9px] leading-none ${todayTaskAvailable ? "text-[var(--gold)]" : "text-foreground/30"}`}>结缘</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top"><p className="text-xs">{todayTaskAvailable ? "结缘一位道友 · 获经验与香火钱" : "今日已结缘"}</p></TooltipContent>
               </Tooltip>
 
               {/* 签到 */}
@@ -1079,7 +1136,7 @@ export default function Home({ targetSection }: HomeProps) {
               <Users className="h-4 w-4 text-[var(--cinnabar)] shrink-0" />
               <span className="font-title text-xl text-[var(--gold)] flex-1">
                 {selectedMonkId
-                  ? (MONKS.find(m => m.id === selectedMonkId)?.name ?? "") + " · 修行日志"
+                  ? (nearbyMonks.find(m => m.id === selectedMonkId)?.name ?? "") + " · 修行日志"
                   : "今日在寺僧人"}
               </span>
               <button
@@ -1091,7 +1148,14 @@ export default function Home({ targetSection }: HomeProps) {
 
             {selectedMonkId ? (
               (() => {
-                const monk = MONKS.find(m => m.id === selectedMonkId)!;
+                const monk = nearbyMonks.find(m => m.id === selectedMonkId);
+                if (!monk) return (
+                  <div className="flex flex-col items-center gap-2 py-10 text-center">
+                    <span className="text-2xl opacity-30">🏯</span>
+                    <span className="text-xs text-foreground/40">该小僧已离开此寺</span>
+                    <button className="temple-ornate-btn px-4 py-1.5 text-xs mt-2" onClick={() => setSelectedMonkId(null)}>返回列表</button>
+                  </div>
+                );
                 return (
                   <div>
                     {/* 档案头 */}
@@ -1120,30 +1184,21 @@ export default function Home({ targetSection }: HomeProps) {
 
                     <div className="mx-6 h-px bg-[var(--bronze-green)]/20" />
 
-                    {/* 修行日志时间轴 */}
+                    {/* 修行状态 */}
                     <div className="px-6 pt-4 pb-2">
                       <div className="flex items-center gap-2 mb-4">
                         <BookOpen className="h-3.5 w-3.5 text-[var(--gold)]" />
-                        <span className="font-title text-sm text-[var(--gold)]">今日修行日志</span>
+                        <span className="font-title text-sm text-[var(--gold)]">修行信息</span>
                       </div>
-                      <div>
-                        {monk.logs.map((log, i) => (
-                          <div key={i} className="flex gap-3">
-                            <div className="flex flex-col items-center" style={{ minWidth: 30 }}>
-                              <div className="text-xl leading-none mt-0.5">{log.icon}</div>
-                              {i < monk.logs.length - 1 && (
-                                <div className="mt-1.5 flex-1 w-px bg-[var(--bronze-green)]/25" style={{ minHeight: 20 }} />
-                              )}
-                            </div>
-                            <div className="pb-4 min-w-0">
-                              <div className="flex items-baseline gap-2">
-                                <span className="text-[11px] text-foreground/40 tabular-nums shrink-0">{log.time}</span>
-                                <span className="text-sm font-medium text-foreground/90">{log.action}</span>
-                              </div>
-                              <p className="text-xs text-foreground/50 mt-0.5">{log.desc}</p>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="temple-pill flex flex-col items-center gap-0.5 py-2.5">
+                          <span className="text-[10px] text-foreground/50">性格</span>
+                          <span className="font-title text-sm text-[var(--gold)]">{monk.personality || "未知"}</span>
+                        </div>
+                        <div className="temple-pill flex flex-col items-center gap-0.5 py-2.5">
+                          <span className="text-[10px] text-foreground/50">修行方式</span>
+                          <span className="font-title text-sm text-[var(--gold)]">{monk.trainingStyle || "未知"}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -1179,11 +1234,17 @@ export default function Home({ targetSection }: HomeProps) {
               /* 僧人列表 */
               <div className="px-6 py-5">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs text-foreground/45">今日 · 清风禅寺</span>
-                  <span className="temple-pill px-3 py-0.5 text-xs text-[var(--gold)]">{MONKS.length} 位僧侣在场</span>
+                  <span className="text-xs text-foreground/45">今日 · {currentTemple.name}</span>
+                  <span className="temple-pill px-3 py-0.5 text-xs text-[var(--gold)]">{nearbyMonks.length} 位僧侣在场</span>
                 </div>
+                {nearbyMonks.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-8 text-center">
+                    <span className="text-2xl opacity-30">🏯</span>
+                    <span className="text-xs text-foreground/35">此寺暂无其他小僧<br/>待有缘人到来……</span>
+                  </div>
+                ) : (
                 <div className="space-y-3">
-                  {MONKS.map(monk => (
+                  {nearbyMonks.map(monk => (
                     <button
                       key={monk.id}
                       className="w-full temple-pill flex items-center gap-4 px-4 py-3 text-left hover:ring-1 hover:ring-[var(--gold)]/50 transition-all group"
@@ -1209,6 +1270,7 @@ export default function Home({ targetSection }: HomeProps) {
                     </button>
                   ))}
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -1538,29 +1600,26 @@ export default function Home({ targetSection }: HomeProps) {
                 >{state.dailyLoginDone ? "已领取" : "领取"}</button>
               </div>
 
-              {/* 结缘任务 */}
+              {/* 结缘任务（仅展示，AI 自动完成） */}
               <div className="temple-pill flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
                   <div className={`grid h-9 w-9 place-items-center rounded-full ${
                     state.dailyTaskDone ? "bg-[var(--gold)]/15 ring-1 ring-[var(--gold)]/30"
-                    : state.dailyLoginDone ? "bg-[var(--cinnabar)]/15 ring-1 ring-[var(--cinnabar)]/40"
                     : "bg-foreground/10 ring-1 ring-foreground/15"
                   }`}>
-                    <Users className={`h-4 w-4 ${state.dailyTaskDone ? "text-[var(--gold)]" : state.dailyLoginDone ? "text-[var(--cinnabar)]" : "text-foreground/30"}`} />
+                    <Users className={`h-4 w-4 ${state.dailyTaskDone ? "text-[var(--gold)]" : "text-foreground/30"}`} />
                   </div>
                   <div>
                     <div className="text-sm font-medium text-foreground/85">结缘一位道友</div>
                     <div className="text-[10px] text-foreground/50 mt-0.5">
-                      {state.dailyTaskDone ? "今日已结缘 · 修行圆满"
-                        : state.dailyLoginDone ? `经验 +80~120，香火钱 +${[20,22,24,26,28][Math.min(state.day-1, 4)]}（30% 触发信物）`
-                        : "请先完成每日签到"}
+                      {state.dailyTaskDone ? "今日已结缘 · 修行圆满" : "AI 遇到道友时将自动结缘"}
                     </div>
                   </div>
                 </div>
                 <button
-                  className={`temple-ornate-btn px-4 py-1.5 text-sm ${(state.dailyTaskDone || !state.dailyLoginDone) ? "opacity-50 cursor-default" : ""}`}
-                  onClick={doMorningTask} disabled={state.dailyTaskDone || !state.dailyLoginDone}
-                >{state.dailyTaskDone ? "已完成" : "出发"}</button>
+                  className="temple-ornate-btn px-4 py-1.5 text-sm opacity-50 cursor-default"
+                  disabled
+                >{state.dailyTaskDone ? "已完成" : "等待中"}</button>
               </div>
 
               <div className="h-px bg-[var(--bronze-green)]/20" />
@@ -1593,6 +1652,44 @@ export default function Home({ targetSection }: HomeProps) {
           </div>
         </div>
       )}
+
+      {/* 奖励弹窗 */}
+      <AnimatePresence>
+        {state.pendingReward && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="temple-panel flex flex-col items-center w-[340px] rounded-2xl overflow-hidden shadow-[0_0_60px_-15px_rgba(255,215,0,0.25)]"
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              <div className="w-full px-7 pt-6 pb-2 text-center">
+                <div className="text-2xl mb-1">🌟</div>
+                <div className="font-title text-xl font-bold text-[var(--gold)] tracking-wide">{state.pendingReward.title}</div>
+              </div>
+              <div className="px-7 pt-3 pb-2 w-full space-y-2">
+                {state.pendingReward.lines.map((line, i) => (
+                  <div key={i} className="text-sm text-foreground/80 leading-relaxed text-center">{line}</div>
+                ))}
+              </div>
+              <div className="px-7 pt-4 pb-6">
+                <button
+                  className="temple-ornate-btn px-8 py-2.5 text-[var(--gold)] border border-[var(--gold)]/50 hover:bg-[var(--gold)]/10 transition-all font-medium"
+                  onClick={acknowledgeReward}
+                >
+                  知道了
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 寺庙解锁弹窗 */}
       <AnimatePresence>

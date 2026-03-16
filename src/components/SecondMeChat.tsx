@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, LogOut, Send, Square, KeyRound, ExternalLink, MessageSquarePlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSecondMeChat } from "@/hooks/useSecondMeChat";
+import type { PresenceMonk } from "@/hooks/useTemplePresence";
+import type { Temple, PlayerProfile } from "@/hooks/useGameState";
 
 
 // ── 消息气泡 ─────────────────────────────────────────────────
@@ -106,8 +108,18 @@ export function LoginPanel({
 // ── 主组件 ───────────────────────────────────────────────────
 export function SecondMeChat({
   chatState,
+  currentTemple,
+  nearbyMonks,
+  profile,
+  merit,
+  encounterCount,
 }: {
   chatState: ReturnType<typeof useSecondMeChat>;
+  currentTemple?: Temple;
+  nearbyMonks?: PresenceMonk[];
+  profile?: PlayerProfile | null;
+  merit?: number;
+  encounterCount?: number;
 }) {
   const {
     authState,
@@ -133,7 +145,31 @@ export function SecondMeChat({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const MONK_SYSTEM_PROMPT = `你是一个在数字寺庙云游修行的数字分身小和尚。请用符合出家人身份的友善、禅意、平静的语气与施主交流。自称「小僧」，称呼对方为「施主」。你的回答应该简短、有温度，不失幽默与智慧。如果施主遇到困难或烦恼，用佛法和生活的大智慧开导他们。在回答中尽量带有禅意。`;
+  const MONK_SYSTEM_PROMPT = (() => {
+    let prompt = `你是一个在数字寺庙云游修行的数字分身小和尚。请用符合出家人身份的友善、禅意、平静的语气与施主交流。自称「小僧」，称呼对方为「施主」。你的回答应该简短、有温度，不失幽默与智慧。如果施主遇到困难或烦恼，用佛法和生活的大智慧开导他们。在回答中尽量带有禅意。`;
+
+    // 注入游戏上下文
+    const parts: string[] = [];
+    if (currentTemple) {
+      parts.push(`你当前所在寺庙：${currentTemple.name}（${currentTemple.location}）`);
+    }
+    if (profile) {
+      parts.push(`施主名为「${profile.name}」，性格${profile.personality}，修行方式为${profile.trainingStyle}`);
+    }
+    if (nearbyMonks && nearbyMonks.length > 0) {
+      const names = nearbyMonks.map(m => `${m.name}(Lv.${m.level})`).join("、");
+      parts.push(`当前同在此寺的其他小僧：${names}。你可以主动提及他们，促成结缘`);
+    } else {
+      parts.push(`此寺暂无其他小僧，只有施主一人`);
+    }
+    if (merit != null) parts.push(`施主功德值：${merit}`);
+    if (encounterCount != null) parts.push(`施主累计结缘：${encounterCount}次`);
+
+    if (parts.length > 0) {
+      prompt += `\n\n=== 当前修行状态 ===\n${parts.join("\n")}`;
+    }
+    return prompt;
+  })();
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

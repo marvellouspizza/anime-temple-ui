@@ -33,7 +33,7 @@ export function extractOAuthCode(): string | null {
 
 export function useSecondMeChat() {
   const [authState, setAuthState] = useState<AuthState>(() =>
-    getToken() ? "authed" : "idle"
+    getToken() ? "loading" : "idle"
   );
   const [user, setUser] = useState<SecondMeUser | null>(null);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
@@ -45,10 +45,22 @@ export function useSecondMeChat() {
 
   /** Second Me 登录成功后，静默创建/恢复修行档案 */
   const syncSupabaseAuth = useCallback(async (smUser: SecondMeUser) => {
+    let uid: string | null = null;
     try {
-      const uid = await ensureSupabaseSession(smUser);
-      setSupabaseUserId(uid);
-      if (uid) {
+      uid = await ensureSupabaseSession(smUser);
+    } catch (e) {
+      console.warn("[Auth] Supabase 会话建立失败，1s 后重试:", e);
+      try {
+        await new Promise(r => setTimeout(r, 1000));
+        uid = await ensureSupabaseSession(smUser);
+      } catch (e2) {
+        console.error("[Auth] Supabase 会话重试失败:", e2);
+      }
+    }
+    console.log("[Auth] supabaseUserId =", uid);
+    // 先确保 players 行存在，再设置 userId 触发 useGameState 加载
+    if (uid) {
+      try {
         await upsertPlayerSecondMe(
           uid,
           smUser.userId,
@@ -56,10 +68,14 @@ export function useSecondMeChat() {
           smUser.bio,
           smUser.avatar
         );
+        console.log("[Auth] upsertPlayerSecondMe 成功");
+      } catch (e) {
+        console.error("[Auth] upsertPlayerSecondMe 失败:", e);
       }
-    } catch (e) {
-      console.error("[Auth] 同步失败:", e);
+    } else {
+      console.warn("[Auth] 未能获取 supabaseUserId，云端同步不可用");
     }
+    setSupabaseUserId(uid);
   }, []);
 
   // ── 手动 Token 登录（开发者模式）─────────────────────────
@@ -70,8 +86,8 @@ export function useSecondMeChat() {
     try {
       const info = await fetchUserInfo();
       setUser(info);
-      setAuthState("authed");
       await syncSupabaseAuth(info);
+      setAuthState("authed");
     } catch (e) {
       setErrorMsg((e as Error).message);
       clearToken();
@@ -92,8 +108,8 @@ export function useSecondMeChat() {
       await exchangeCodeForToken(code);
       const info = await fetchUserInfo();
       setUser(info);
-      setAuthState("authed");
       await syncSupabaseAuth(info);
+      setAuthState("authed");
     } catch (e) {
       setErrorMsg((e as Error).message);
       clearToken();
@@ -108,8 +124,8 @@ export function useSecondMeChat() {
     try {
       const info = await fetchUserInfo();
       setUser(info);
-      setAuthState("authed");
       await syncSupabaseAuth(info);
+      setAuthState("authed");
     } catch (e) {
       setErrorMsg((e as Error).message);
       clearToken();

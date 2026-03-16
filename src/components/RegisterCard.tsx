@@ -7,6 +7,8 @@ import type { Gender, Personality, PlayerProfile, TrainingStyle } from "@/hooks/
 import { TRAINING_WEIGHTS } from "@/hooks/useGameState";
 import pManImg from "@/assets/p-man.png";
 import pWomanImg from "@/assets/p-woman.png";
+import pManAvatar from "@/assets/p-man_头像.png";
+import pWomanAvatar from "@/assets/p-woman_头像.png";
 
 interface Props {
   onRegister: (profile: PlayerProfile) => void;
@@ -28,15 +30,9 @@ const TRAINING_STYLES: { value: TrainingStyle; label: string; desc: string; emoj
   { value: "祈福派", label: "祈福派", desc: "虔诚上香供奉，为众生祈福", emoji: "🕯️" },
 ];
 
-const DEFAULT_AVATARS_MALE = [
-  "https://api.dicebear.com/7.x/bottts/svg?seed=monk1&backgroundColor=b6e3f4",
-  "https://api.dicebear.com/7.x/bottts/svg?seed=monk2&backgroundColor=d1d4f9",
-  "https://api.dicebear.com/7.x/bottts/svg?seed=monk3&backgroundColor=c0aede",
-];
-const DEFAULT_AVATARS_FEMALE = [
-  "https://api.dicebear.com/7.x/bottts/svg?seed=nun1&backgroundColor=ffd5dc",
-  "https://api.dicebear.com/7.x/bottts/svg?seed=nun2&backgroundColor=ffdfbf",
-  "https://api.dicebear.com/7.x/bottts/svg?seed=nun3&backgroundColor=c1f0c8",
+const DEFAULT_AVATARS = [
+  { url: pManAvatar, label: "男" },
+  { url: pWomanAvatar, label: "女" },
 ];
 
 export function RegisterCard({ onRegister }: Props) {
@@ -44,18 +40,17 @@ export function RegisterCard({ onRegister }: Props) {
   const [gender, setGender] = useState<Gender>("女");
   const [name, setName] = useState("");
   const [birthday, setBirthday] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState(DEFAULT_AVATARS_FEMALE[0]);
+  const [avatarUrl, setAvatarUrl] = useState(gender === "男" ? pManAvatar : pWomanAvatar);
   const [personality, setPersonality] = useState<Personality>("沉稳");
   const [trainingStyle, setTrainingStyle] = useState<TrainingStyle>("打坐派");
   const [customAvatar, setCustomAvatar] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const defaultAvatars = gender === "男" ? DEFAULT_AVATARS_MALE : DEFAULT_AVATARS_FEMALE;
   const displayAvatar = customAvatar || avatarUrl;
 
   function handleGenderChange(g: Gender) {
     setGender(g);
-    setAvatarUrl(g === "男" ? DEFAULT_AVATARS_MALE[0] : DEFAULT_AVATARS_FEMALE[0]);
+    setAvatarUrl(g === "男" ? pManAvatar : pWomanAvatar);
     setCustomAvatar("");
   }
 
@@ -188,9 +183,9 @@ export function RegisterCard({ onRegister }: Props) {
                 <div className="flex-1">
                   <div className="text-[10px] text-foreground/50 mb-2 tracking-wider">选择默认头像</div>
                   <div className="flex gap-2">
-                    {defaultAvatars.map((url, i) => (
+                    {DEFAULT_AVATARS.map(({ url, label }) => (
                       <button
-                        key={i}
+                        key={label}
                         onClick={() => { setAvatarUrl(url); setCustomAvatar(""); }}
                         className={`h-12 w-12 rounded-full overflow-hidden transition-all ${
                           displayAvatar === url && !customAvatar
@@ -198,8 +193,7 @@ export function RegisterCard({ onRegister }: Props) {
                             : "ring-1 ring-foreground/20 opacity-60 hover:opacity-100"
                         }`}
                       >
-                        <img src={url} alt={`头像${i + 1}`} className="h-full w-full object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/bottts/svg?seed=fallback"; }} />
+                        <img src={url} alt={label} className="h-full w-full object-cover" />
                       </button>
                     ))}
                   </div>

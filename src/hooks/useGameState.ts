@@ -174,13 +174,15 @@ function generateAgentLogs(
   templeName: string,
   templeId: number,
   templeItemsCollected: number[],
-  startLogId: number
+  startLogId: number,
+  nearbyPlayerNames?: string[],
 ): {
   entries: ActivityEntry[];
   incenseCoinDelta: number;
   meritDelta: number;
   newSGradeItems: string[];
   newTempleItemIds: number[];
+  hasFriendEncounter: boolean;
 } {
   const weights = TRAINING_WEIGHTS[profile.trainingStyle];
   const friendProb = PERSONALITY_FRIEND_PROB[profile.personality];
@@ -202,6 +204,7 @@ function generateAgentLogs(
   const entries: ActivityEntry[] = [];
   let coinDelta = 0;
   let meritDelta = 0;
+  let hasFriendEncounter = false;
   const newSGradeItems: string[] = [];
   const newTempleItemIds = [...templeItemsCollected];
   let logId = startLogId;
@@ -222,6 +225,10 @@ function generateAgentLogs(
   for (const time of times) {
     let action = pickWeighted(weights);
 
+    // 无真实玩家在场时，交友直接改为打坐（不使用 NPC）
+    if (action === "交友" && (!nearbyPlayerNames || nearbyPlayerNames.length === 0)) {
+      action = "打坐";
+    }
     // 交友需通过性格概率检查，否则改为打坐
     if (action === "交友" && Math.random() > friendProb) {
       action = "打坐";
@@ -261,15 +268,17 @@ function generateAgentLogs(
         break;
       }
       case "交友": {
+        // 此处必有真实玩家在场（无人时已在上方 fallback 为打坐）
         icon = "🤝";
-        const monk = randItem(NPC_MONKS_DATA);
+        hasFriendEncounter = true;
+        const monkName = randItem(nearbyPlayerNames!);
         const interaction = randItem(FRIEND_INTERACTIONS);
         const baseDesc = randItem(ACTION_DESCS.交友);
         const friendCoins = 1 + Math.floor(Math.random() * 5);
         const friendMerit = 1 + Math.floor(Math.random() * 3);
         coinDelta += friendCoins;
         meritDelta += friendMerit;
-        desc = `${baseDesc} 与道友「${monk.name}」${interaction}，获赠「${monk.gift}」。`;
+        desc = `${baseDesc} 与道友「${monkName}」${interaction}。`;
         effectText = `香火钱 +${friendCoins}，功德 +${friendMerit}`;
         break;
       }
@@ -287,7 +296,7 @@ function generateAgentLogs(
     entries.push({ id: logId++, time, date: todayStr, icon, action, desc: fullDesc });
   }
 
-  return { entries, incenseCoinDelta: coinDelta, meritDelta, newSGradeItems, newTempleItemIds };
+  return { entries, incenseCoinDelta: coinDelta, meritDelta, newSGradeItems, newTempleItemIds, hasFriendEncounter };
 }
 
 // ── 经验公式 ──────────────────────────────────────────────────
@@ -369,12 +378,13 @@ export interface GameState {
   sGradeItems: string[];          // 已收集的 S 级信物名称
   agentLogsGeneratedDay: string;  // 已生成 AI 日志的日期，避免重复生成
   pendingUnlockedTemples: Temple[]; // 待展示的解锁寺庙弹窗列表
+  pendingReward: { title: string; lines: string[] } | null; // 待展示的奖励弹窗
 }
 
 const INITIAL_STATE: GameState = {
   level: 0,
   exp: 0,
-  incenseCoin: 30,
+  incenseCoin: 0,
   merit: 0,
   day: 0,
   lastLoginDate: "",
@@ -390,6 +400,7 @@ const INITIAL_STATE: GameState = {
   sGradeItems: [],
   agentLogsGeneratedDay: "",
   pendingUnlockedTemples: [],
+  pendingReward: null,
 };
 
 function getToday(): string {
@@ -415,6 +426,12 @@ export function useGameState(userId: string | null = null) {
   // 始终指向最新 state，供 useIncenseCoin 在 setState 外读取当前香火錢
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
+
+  // 最新的在线玩家名列表（由外部通过 setNearbyPlayerNames 更新）
+  const nearbyNamesRef = useRef<string[]>([]);
+  const setNearbyPlayerNames = useCallback((names: string[]) => {
+    nearbyNamesRef.current = names;
+  }, []);
 
   // ── 首次获到 userId 时，从 Supabase 加载数据────────────────
   useEffect(() => {
@@ -557,7 +574,8 @@ export function useGameState(userId: string | null = null) {
           currentTemple.name,
           currentTemple.id,
           ns.templeItemsCollected,
-          ns.nextLogId
+          ns.nextLogId,
+          nearbyNamesRef.current.length > 0 ? nearbyNamesRef.current : undefined,
         );
         ns.activityLog = [...[...agentResult.entries].reverse(), ...ns.activityLog].slice(0, 200);
         ns.incenseCoin = Math.max(0, ns.incenseCoin + agentResult.incenseCoinDelta);
@@ -572,13 +590,48 @@ export function useGameState(userId: string | null = null) {
             description: agentResult.newSGradeItems.join("，"),
           });
         }
+
+        // AI 交友日志即为结缘行为，自动完成结缘任务
+        if (agentResult.hasFriendEncounter && !ns.dailyTaskDone) {
+          const taskDayIdx = Math.max(0, ns.day - 1);
+          const taskCoins = TASK_COIN_REWARDS[taskDayIdx] ?? TASK_COIN_REWARDS[MAX_DAYS - 1];
+          const taskExp = TASK_EXP_MIN + Math.floor(Math.random() * (TASK_EXP_MAX - TASK_EXP_MIN + 1));
+          let totalCoins = taskCoins;
+          let totalExp = taskExp;
+          const taskEntry = makeEntry(ns.nextLogId++, "🙏", "结缘一位道友", `AI 修行中与道友结缘，经验 +${taskExp}，香火钱 +${taskCoins}`);
+          const taskEntries: ActivityEntry[] = [taskEntry];
+          const hasSpecial = Math.random() < SPECIAL_EVENT_CHANCE;
+          if (hasSpecial) {
+            totalCoins += SPECIAL_COIN_BONUS;
+            totalExp += SPECIAL_EXP_BONUS;
+            taskEntries.unshift(makeEntry(ns.nextLogId++, "🎁", "道友赠送信物", `特殊事件！额外经验 +${SPECIAL_EXP_BONUS}，香火钱 +${SPECIAL_COIN_BONUS}`));
+          }
+          ns.dailyTaskDone = true;
+          ns.encounterCount += 1;
+          ns.incenseCoin += totalCoins;
+          ns.exp += totalExp;
+          ns.merit += 100;
+          ns.activityLog = [...taskEntries, ...ns.activityLog].slice(0, 200);
+        }
       }
 
       ns = processLevelUps(ns);
 
-      toast.success(`第 ${newDay} 天 · 香火已领取`, {
-        description: `香火钱 +${coins} · 经验 +${directExp}`,
-      });
+      // 收集奖励信息到弹窗
+      const rewardLines: string[] = [
+        `🪙 香火钱 +${coins}`,
+        `✨ 经验 +${directExp}`,
+        `🙏 功德 +50`,
+      ];
+      if (ns.dailyTaskDone && isNewDay) {
+        rewardLines.push(`🤝 AI 已自动结缘道友`);
+      }
+      if (ns.merit > prev.merit + 50) {
+        // 有生日奖励
+        rewardLines.push(`🎂 生辰贺礼：香火钱 +20，功德 +100`);
+      }
+      ns.pendingReward = { title: `第 ${newDay} 天 · 香火已领取`, lines: rewardLines };
+
       return ns;
     });
   }, [processLevelUps]);
@@ -631,11 +684,17 @@ export function useGameState(userId: string | null = null) {
       };
       ns = processLevelUps(ns);
 
-      toast.success("结缘圆满！", {
-        description: hasSpecial
-          ? `经验 +${totalExp}（含信物）· 香火钱 +${totalCoins}`
-          : `经验 +${taskExp} · 香火钱 +${taskCoins}`,
-      });
+      // 收集奖励信息到弹窗
+      const rewardLines: string[] = [
+        `🪙 香火钱 +${taskCoins}`,
+        `✨ 经验 +${taskExp}`,
+        `🙏 功德 +100`,
+      ];
+      if (hasSpecial) {
+        rewardLines.push(`🎁 道友赠送信物：经验 +${SPECIAL_EXP_BONUS}，香火钱 +${SPECIAL_COIN_BONUS}`);
+      }
+      ns.pendingReward = { title: "结缘圆满！", lines: rewardLines };
+
       return ns;
     });
   }, [processLevelUps]);
@@ -697,7 +756,7 @@ export function useGameState(userId: string | null = null) {
       const ns: GameState = {
         ...INITIAL_STATE,
         profile,
-        incenseCoin: 30,
+        incenseCoin: 0,
         merit: 0,
       };
       toast.success(`欢迎，${profile.name}！✨`, {
@@ -713,9 +772,14 @@ export function useGameState(userId: string | null = null) {
 
   /** 重置游戏（调试用） */
   const resetGame = useCallback(() => {
-    setState({ ...INITIAL_STATE });
+    const fresh = { ...INITIAL_STATE };
+    setState(fresh);
+    // 立即同步到云端，避免重新加载后恢复旧数据
+    if (userId) {
+      upsertGameState(userId, fresh).catch(console.error);
+    }
     toast.success("修行已重置", { description: "一切归零，重新修行" });
-  }, []);
+  }, [userId]);
 
   /** 确认解锁（关闭新寺庙解锁弹窗） */
   const acknowledgeUnlock = useCallback((templeId: number) => {
@@ -723,6 +787,11 @@ export function useGameState(userId: string | null = null) {
       ...prev,
       pendingUnlockedTemples: prev.pendingUnlockedTemples.filter(t => t.id !== templeId)
     }));
+  }, []);
+
+  /** 确认奖励（关闭奖励弹窗） */
+  const acknowledgeReward = useCallback(() => {
+    setState(prev => ({ ...prev, pendingReward: null }));
   }, []);
 
   // ── 计算属性 ─────────────────────────────────────────────────
@@ -751,6 +820,8 @@ export function useGameState(userId: string | null = null) {
     doRegister,
     resetGame,
     acknowledgeUnlock,
+    acknowledgeReward,
     setCurrentTempleId: (id: number) => setState(prev => ({ ...prev, currentTempleId: id })),
+    setNearbyPlayerNames,
   };
 }

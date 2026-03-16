@@ -77,26 +77,30 @@ export async function upsertPlayerSecondMe(
 
 /**
  * 保存玩家角色档案（完成注册卡后调用）
+ * 使用 .update() 而非 .upsert()，避免在 players 行不存在时
+ * 因缺少 secondme_identifier 而违反 NOT NULL 约束
  */
 export async function savePlayerProfile(
   userId: string,
   profile: PlayerProfileLike
 ): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from("players").upsert(
-    {
-      id: userId,
+  const { error, count } = await supabase
+    .from("players")
+    .update({
       name: profile.name,
       gender: profile.gender,
       birthday: profile.birthday,
       personality: profile.personality,
       training_style: profile.trainingStyle,
       avatar_url: profile.avatarUrl,
-    },
-    { onConflict: "id" }
-  );
-  if (error)
-    console.error("[Supabase] players profile upsert error:", error.message);
+    })
+    .eq("id", userId);
+  if (error) {
+    console.error("[Supabase] players profile update error:", error.message);
+  } else {
+    console.log("[Supabase] savePlayerProfile 成功, count =", count);
+  }
 }
 
 /**
