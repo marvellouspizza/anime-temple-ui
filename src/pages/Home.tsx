@@ -203,6 +203,9 @@ export default function Home({ targetSection }: HomeProps) {
   // 香火钱来源面板
   const [showCoinPanel, setShowCoinPanel] = useState(false);
 
+  // 设置面板
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+
   // 其他僧人
   const [showMonksPanel, setShowMonksPanel] = useState(false);
   const [selectedMonkId, setSelectedMonkId] = useState<string | null>(null);
@@ -609,7 +612,7 @@ export default function Home({ targetSection }: HomeProps) {
             </button>
             <button
               className="temple-icon-btn h-8 w-8"
-              onClick={() => comingSoon("设置")}
+              onClick={() => setShowSettingsPanel(true)}
               aria-label="设置"
             >
               <Settings className="h-4 w-4 text-[var(--bronze-green)]" />
@@ -1602,9 +1605,6 @@ export default function Home({ targetSection }: HomeProps) {
               <div className="flex items-center gap-2">
                 <CalendarCheck className="h-4 w-4 text-[var(--gold)]" />
                 <span className="font-title text-xl text-[var(--gold)]">今日修行</span>
-                {state.day > 0 && (
-                  <span className="temple-pill px-2 py-0.5 text-[10px] text-foreground/60">第 {state.day} / 5 天</span>
-                )}
               </div>
               <button className="text-foreground/40 hover:text-foreground transition-colors text-2xl leading-none px-1"
                 onClick={() => setShowDailyPanel(false)} aria-label="关闭">×</button>
@@ -1635,24 +1635,6 @@ export default function Home({ targetSection }: HomeProps) {
                   </div>
                 </div>
               )}
-              {/* 5天进度 */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-foreground/60">五日修行进度</span>
-                  <span className="text-xs text-foreground/50">{state.day} / 5 天</span>
-                </div>
-                <div className="flex gap-1.5">
-                  {[1,2,3,4,5].map(d => (
-                    <div key={d} className={`flex-1 h-2 rounded-full transition-colors ${d <= state.day ? "bg-[var(--gold)]" : "bg-foreground/15"}`} />
-                  ))}
-                </div>
-                <div className="flex justify-between mt-1">
-                  {[1,2,3,4,5].map(d => (
-                    <span key={d} className={`text-[9px] ${d <= state.day ? "text-[var(--gold)]" : "text-foreground/30"}`}>天{d}</span>
-                  ))}
-                </div>
-              </div>
-
               <div className="h-px bg-[var(--bronze-green)]/20" />
 
               {/* 每日签到 */}
@@ -1713,14 +1695,46 @@ export default function Home({ targetSection }: HomeProps) {
                 ))}
               </div>
 
-              <div className="flex justify-between items-center pt-1">
-                <button
-                  className="flex items-center gap-1 text-[10px] text-foreground/25 hover:text-foreground/50 transition-colors"
-                  onClick={() => { resetGame(); setShowDailyPanel(false); }}
-                >
-                  <RotateCcw className="h-2.5 w-2.5" />重置修行
-                </button>
+              <div className="flex justify-end items-center pt-1">
                 <button className="temple-ornate-btn px-5 py-2 text-sm" onClick={() => setShowDailyPanel(false)}>关闭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 主页设置面板 */}
+      {showSettingsPanel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSettingsPanel(false); }}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative z-10 w-[400px] max-w-[94vw] temple-panel rounded-3xl overflow-hidden select-none">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--bronze-green)]/30">
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-[var(--bronze-green)]" />
+                <span className="font-title text-xl text-[var(--bronze-green)]">设置</span>
+              </div>
+              <button className="text-foreground/40 hover:text-foreground transition-colors text-2xl leading-none px-1"
+                onClick={() => setShowSettingsPanel(false)} aria-label="关闭">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              {/* 重置修行 */}
+              <div className="temple-pill flex items-center justify-between px-4 py-3">
+                <div>
+                  <div className="text-sm font-medium text-foreground/85">重置修行</div>
+                  <div className="text-[10px] text-foreground/50 mt-0.5">清空所有进度，重新开始</div>
+                </div>
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] text-foreground/40 hover:text-[var(--cinnabar)] border border-foreground/15 hover:border-[var(--cinnabar)]/40 transition-colors"
+                  onClick={() => { resetGame(); setShowSettingsPanel(false); }}
+                >
+                  <RotateCcw className="h-3 w-3" />重置
+                </button>
+              </div>
+              <div className="flex justify-end pt-1">
+                <button className="temple-ornate-btn px-5 py-2 text-sm" onClick={() => setShowSettingsPanel(false)}>关闭</button>
               </div>
             </div>
           </div>
