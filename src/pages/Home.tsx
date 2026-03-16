@@ -82,6 +82,9 @@ import { useSecondMeChat } from "@/hooks/useSecondMeChat";
 import { SecondMeChat, LoginPanel } from "@/components/SecondMeChat";
 import { useTemplePresence } from "@/hooks/useTemplePresence";
 import type { PresenceMonk } from "@/hooks/useTemplePresence";
+import { useFriendChat } from "@/hooks/useFriendChat";
+import { FriendChatPanel } from "@/components/FriendChatPanel";
+import { fetchPlayersByIds } from "@/lib/supabaseGame";
 
 
 
@@ -206,6 +209,9 @@ export default function Home({ targetSection }: HomeProps) {
   // 设置面板
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
 
+  // 好友 / 私聊面板
+  const [showFriendPanel, setShowFriendPanel] = useState(false);
+
   // 其他僧人
   const [showMonksPanel, setShowMonksPanel] = useState(false);
   const [selectedMonkId, setSelectedMonkId] = useState<string | null>(null);
@@ -232,6 +238,16 @@ export default function Home({ targetSection }: HomeProps) {
   } : null;
   const { nearbyMonks } = useTemplePresence(presenceSelf);
 
+  // 好友系统 + 私聊
+  const friendChat = useFriendChat(supabaseUserId ?? null);
+  // 缓存 pending 请求的 requester 档案信息
+  const [pendingProfiles, setPendingProfiles] = useState<Record<string, { name: string; avatar: string }>>({});
+  useEffect(() => {
+    const ids = friendChat.pendingRequests.map(r => r.requester);
+    if (ids.length === 0) { setPendingProfiles({}); return; }
+    fetchPlayersByIds(ids).then(setPendingProfiles);
+  }, [friendChat.pendingRequests]);
+
   // 同步在线玩家名到 useGameState（供 AI 日志交友使用）
   useEffect(() => {
     setNearbyPlayerNames(nearbyMonks.map(m => m.name));
@@ -255,11 +271,23 @@ export default function Home({ targetSection }: HomeProps) {
     ) {
       autoEncounterFiredRef.current = true;
       doMorningTask();
+
+      // AI 自动向在场的随机一位玩家发送好友申请
+      const target = nearbyMonks[Math.floor(Math.random() * nearbyMonks.length)];
+      if (target) {
+        friendChat.requestFriend(target.id).then(result => {
+          if (result.ok) {
+            toast.success(`AI 修行中与「${target.name}」结缘`, { description: result.msg });
+          }
+          // 已是好友 / 已申请过 → 静默忽略
+        });
+      }
     }
     // 新的一天重置标记
     if (!state.dailyLoginDone) {
       autoEncounterFiredRef.current = false;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearbyMonks, state.dailyTaskDone, state.dailyLoginDone, doMorningTask]);
 
   // 实时动态
@@ -611,6 +639,17 @@ export default function Home({ targetSection }: HomeProps) {
               }
             </button>
             <button
+              className="temple-icon-btn h-8 w-8 relative"
+              onClick={() => setShowFriendPanel(true)}
+              aria-label="道友"
+              title="道友列表"
+            >
+              <Heart className="h-4 w-4 text-[var(--bronze-green)]" />
+              {(friendChat.pendingRequests.length > 0 || friendChat.friends.some(f => f.unread > 0)) && (
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--cinnabar)] animate-pulse" />
+              )}
+            </button>
+            <button
               className="temple-icon-btn h-8 w-8"
               onClick={() => setShowSettingsPanel(true)}
               aria-label="设置"
@@ -706,12 +745,13 @@ export default function Home({ targetSection }: HomeProps) {
               {([
                 { label: "寺庙概览", icon: <Landmark     className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
                 { label: "其他僧人", icon: <Users        className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
+                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
                 { label: "今日修行", icon: <CalendarCheck className="h-5 w-5" />, onClick: () => setShowDailyPanel(true) },
                 { label: "成就",     icon: <Trophy       className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
-              ] as const).map(({ label, icon, onClick }) => (
+              ] as { label: string; icon: React.ReactNode; onClick: () => void; badge?: number }[]).map(({ label, icon, onClick, badge }) => (
                 <button
                   key={label}
-                  className="temple-icon-btn h-16 w-16"
+                  className="temple-icon-btn h-16 w-16 relative"
                   onClick={onClick}
                   aria-label={label}
                 >
@@ -719,6 +759,11 @@ export default function Home({ targetSection }: HomeProps) {
                     <span className="text-[var(--gold)]">{icon}</span>
                     <span className="text-[10px] leading-none tracking-wide text-[var(--gold)]">{label}</span>
                   </div>
+                  {badge != null && badge > 0 && (
+                    <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] grid place-items-center rounded-full bg-[var(--cinnabar)] text-white text-[8px] font-bold leading-none px-1">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -1284,10 +1329,14 @@ export default function Home({ targetSection }: HomeProps) {
                     <div className="flex gap-2 justify-end px-6 py-4">
                       <button
                         className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
-                        onClick={() => comingSoon("打招呼")}
+                        onClick={async () => {
+                          if (!supabaseUserId || !monk) return;
+                          const result = await friendChat.requestFriend(monk.id);
+                          toast[result.ok ? 'success' : 'info'](result.msg);
+                        }}
                       >
-                        <MessageCircle className="h-3.5 w-3.5" />
-                        打招呼
+                        <Heart className="h-3.5 w-3.5" />
+                        结缘
                       </button>
                       <button
                         className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
@@ -1699,6 +1748,34 @@ export default function Home({ targetSection }: HomeProps) {
                 <button className="temple-ornate-btn px-5 py-2 text-sm" onClick={() => setShowDailyPanel(false)}>关闭</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 道友 / 私聊面板 */}
+      {showFriendPanel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowFriendPanel(false); friendChat.closeChat(); } }}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative z-10 w-[440px] max-w-[94vw] h-[560px] max-h-[80vh] temple-panel rounded-3xl overflow-hidden select-none flex flex-col">
+            <FriendChatPanel
+              myUserId={supabaseUserId!}
+              myAvatar={state.profile?.avatarUrl ?? chatState.user?.avatar ?? ""}
+              friends={friendChat.friends}
+              pendingRequests={friendChat.pendingRequests}
+              pendingProfiles={pendingProfiles}
+              activeChatPeerId={friendChat.activeChatPeerId}
+              messages={friendChat.messages}
+              isSending={friendChat.isSending}
+              onOpenChat={friendChat.openChat}
+              onCloseChat={friendChat.closeChat}
+              onSend={friendChat.send}
+              onAccept={(id) => { friendChat.acceptRequest(id); toast.success("已结为道友"); }}
+              onReject={(id) => { friendChat.rejectRequest(id); }}
+              onClose={() => { setShowFriendPanel(false); friendChat.closeChat(); }}
+            />
           </div>
         </div>
       )}
