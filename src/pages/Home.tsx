@@ -5,8 +5,6 @@
   - 交互：按钮/图标有明显的悬浮反馈
 */
 
-import bgTemple from "@/assets/bg-temple.mp4";
-import bgTempleImg from "@/assets/bg-temple.png";
 import startBgImg from "@/assets/1111.png";
 import pWoman from "@/assets/p-woman.png";
 import pMan from "@/assets/p-man.png";
@@ -23,7 +21,7 @@ function getTempleImage(name: string): string {
   for (const [path, src] of Object.entries(_templeImageModules)) {
     if (path.includes(name)) return src;
   }
-  return bgTempleImg;
+  return startBgImg;
 }
 
 // 寺庙视频（eager 预加载）
@@ -52,6 +50,7 @@ import {
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
+  Download,
   Eye,
   EyeOff,
   Flame,
@@ -131,6 +130,33 @@ interface HomeProps {
 
 function comingSoon(label: string) {
   toast.message(`${label}：敬请期待`, { description: "本界面为 UI Demo，用于视觉与交互演示。" });
+}
+
+async function handleDownloadWallpaper(templeName: string) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  if (!supabaseUrl) {
+    toast.error("未配置云存储，无法下载壁纸");
+    return;
+  }
+  const filename = `${templeName}.png`;
+  const url = `${supabaseUrl}/storage/v1/object/public/temple-wallpapers/${encodeURIComponent(filename)}`;
+  const toastId = toast.loading(`${templeName} · 壁纸下载中…`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    toast.success("壁纸已保存！", { id: toastId });
+  } catch {
+    toast.error("下载失败，请稍后重试", { id: toastId });
+  }
 }
 
 export default function Home({ targetSection }: HomeProps) {
@@ -698,21 +724,38 @@ export default function Home({ targetSection }: HomeProps) {
                 >
                 </motion.div>
               ) : (
-                <motion.video
-                  key={immersiveTempleId ?? 'zero'}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 1.5, ease: "easeInOut" }}
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
-                  src={immersiveTempleId !== null && immersiveTempleId !== 0
-                    ? (getTempleVideo(TWELVE_TEMPLES.find(t => t.id === immersiveTempleId)?.name ?? '') ?? bgTemple)
-                    : bgTemple}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                />
+                (() => {
+                  const _tName = immersiveTempleId !== null && immersiveTempleId !== 0
+                    ? (TWELVE_TEMPLES.find(t => t.id === immersiveTempleId)?.name ?? '')
+                    : '';
+                  const _vSrc = _tName ? getTempleVideo(_tName) : null;
+                  const _iSrc = _tName ? getTempleImage(_tName) : startBgImg;
+                  return _vSrc ? (
+                    <motion.video
+                      key={`video-${immersiveTempleId ?? 'zero'}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 1.5, ease: "easeInOut" }}
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                      src={_vSrc}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    <motion.div
+                      key={`img-${immersiveTempleId ?? 'zero'}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 1.5, ease: "easeInOut" }}
+                      className="absolute inset-0 overflow-hidden bg-center bg-cover"
+                      style={{ backgroundImage: `url(${_iSrc})` }}
+                    />
+                  );
+                })()
               )}
             </AnimatePresence>
             {/* 角色立绘 — 调整大小改 h-[72%]，位置改 bottom-0 left-[30%] */}
@@ -1034,6 +1077,16 @@ export default function Home({ targetSection }: HomeProps) {
                             className="temple-ornate-btn px-4 py-1.5 text-xs bg-[var(--cinnabar)]/20 ring-1 ring-[var(--cinnabar)]/50 text-white hover:bg-[var(--cinnabar)]/30"
                             onClick={() => { setImmersiveTempleId(temple.id); setCurrentTempleId(temple.id); setShowTempleOverview(false); setSelectedTempleId(null); }}
                           >✦ 到此修行</button>
+                        )}
+                        {isUnlocked && (
+                          <button
+                            className="temple-ornate-btn inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-[var(--gold)]/10 hover:bg-[var(--gold)]/20"
+                            onClick={() => handleDownloadWallpaper(temple.name)}
+                            title="下载寺庙壁纸原图（4K PNG）"
+                          >
+                            <Download className="h-3 w-3" />
+                            壁纸 4K
+                          </button>
                         )}
                         <button className="temple-ornate-btn px-4 py-1.5 text-xs" onClick={() => { setShowTempleOverview(false); setSelectedTempleId(null); }}>关闭</button>
                       </div>
