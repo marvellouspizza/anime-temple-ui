@@ -100,6 +100,7 @@ html, body {
   --ming-yellow:  oklch(0.72 0.16 82);
   --bronze-green: oklch(0.44 0.13 162);
   --gold:         oklch(0.68 0.14 76);
+  --gold-deep:    oklch(0.52 0.18 72);
 
   /* 语义色 */
   --background:             oklch(0.94 0.04 155);
@@ -154,6 +155,7 @@ html, body {
   --ming-yellow:  oklch(0.66 0.13 68);
   --bronze-green: oklch(0.46 0.11 50);  /* 焦糖棕，取代绿调 */
   --gold:         oklch(0.42 0.13 52);  /* 深琥珀棕金，浅色背景下清晰可读 */
+  --gold-deep:    oklch(0.28 0.15 48);  /* 更深的棕金，可读性强 */
 
   /* 背景：H=50 暖棕，比原来 H=65 明显更棕 */
   --background:             oklch(24.666% 0.05717 48.641 / 0.786);
@@ -230,7 +232,6 @@ html, body {
 }
 
 .warm .temple-shrine-frame {
-  border-color: oklch(0.50 0.10 48 / 40%);
   box-shadow:
     0 0 0 4px oklch(0.50 0.10 48 / 10%),
     0 0 40px oklch(0.50 0.10 48 / 12%),
@@ -360,7 +361,7 @@ html, body {
     aspect-ratio: 16 / 9;
     border-radius: 0.75rem;
     overflow: hidden;
-    border: 1px solid oklch(0.42 0.14 162 / 40%);
+    /** 移除了此处的实体边框 */
     box-shadow:
       0 0 0 4px oklch(0.42 0.14 162 / 10%),
       0 0 40px oklch(0.42 0.14 162 / 15%),

@@ -9,6 +9,13 @@
  */
 import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { streamChat, getToken } from "@/lib/secondme";
+import {
+  upsertGameState,
+  fetchGameState,
+  fetchPlayerProfile,
+  savePlayerProfile,
+} from "@/lib/supabaseGame";
 
 // ── 核心参数 ──────────────────────────────────────────────────
 const BASE_EXP = 13;
@@ -41,15 +48,258 @@ export const INCENSE_ACTIONS = {
 
 export type IncenseAction = keyof typeof INCENSE_ACTIONS;
 
+// ── 玩家档案类型 ──────────────────────────────────────────────
+export type Personality = "沉稳" | "好奇" | "活泼" | "内向" | "刻苦";
+export type TrainingStyle = "打坐派" | "阅读派" | "观景派" | "助人派" | "祈福派";
+export type Gender = "男" | "女";
+
+export interface PlayerProfile {
+  name: string;
+  gender: Gender;
+  birthday: string;        // YYYY-MM-DD
+  personality: Personality;
+  trainingStyle: TrainingStyle;
+  avatarUrl: string;
+}
+
+// ── AI 修行逻辑常量 ───────────────────────────────────────────
+/** S 级信物列表 */
+export const S_GRADE_ITEMS = [
+  "冰晶法轮✨", "金刚舍利🔮", "玲珑塔✴️",
+  "紫金钵盂💫", "梵天宝珠🌟", "三宝神符⭐",
+  "苍穹莲台🏵️", "月轮神镜🌕", "般若琉璃珠🔵",
+  "雷音鼓⚡",   "慈悲宝冠👑", "无相法器☯️",
+];
+
+/** 供奉时 S 级信物掉落概率（每寺庙仅触发一次） */
+const S_GRADE_DROP_CHANCE = 0.08;
+
+/** 修行方式 → 行为权重（百分比） */
+export const TRAINING_WEIGHTS: Record<TrainingStyle, Record<string, number>> = {
+  打坐派: { 打坐: 50, 抄经: 20, 散步: 10, 供奉: 10, 交友: 10 },
+  阅读派: { 打坐: 30, 抄经: 50, 散步: 10, 供奉: 10, 交友: 10 },
+  观景派: { 打坐: 20, 抄经: 10, 散步: 50, 供奉: 10, 交友: 10 },
+  助人派: { 打坐: 20, 抄经: 10, 散步: 20, 供奉: 10, 交友: 40 },
+  祈福派: { 打坐: 20, 抄经: 10, 散步: 20, 供奉: 50, 交友:  5 },
+};
+
+/** 性格 → 自发交友概率 */
+const PERSONALITY_FRIEND_PROB: Record<Personality, number> = {
+  沉稳: 0.25,
+  好奇: 0.45,
+  活泼: 0.65,
+  内向: 0.15,
+  刻苦: 0.35,
+};
+
+/** 寺庙中的 NPC 道友 */
+const NPC_MONKS_DATA = [
+  { name: "空心小僧", gift: "小卷轴" },
+  { name: "悟尘行者", gift: "香火石" },
+  { name: "慧光禅子", gift: "金线绳" },
+  { name: "无为居士", gift: "竹片符" },
+  { name: "明镜禅师", gift: "净水瓶" },
+  { name: "云游和尚", gift: "禅豆粒" },
+  { name: "普度法师", gift: "莲花印" },
+  { name: "静虚居士", gift: "木鱼片" },
+];
+
+/** 交友互动类型 */
+const FRIEND_INTERACTIONS = ["问候致礼", "互赠禅语", "共同打坐", "一起散步", "分享经文"];
+
+/** 修行行为描述模板 */
+const ACTION_DESCS: Record<string, string[]> = {
+  打坐: [
+    "静坐庭院古柏之下，合目调息，万籁俱寂，心境如镜。",
+    "禅堂端坐，呼吸绵长深远，念念归一，渐入定境。",
+    "晨光初照，独坐石台，鸟鸣声中默念心经，清净无垠。",
+    "古树浓荫之下冥想，落叶无声，心境豁然，尘念皆消。",
+    "面对山水打坐，天地之气充盈，身心合一，妙不可言。",
+  ],
+  抄经: [
+    "研墨执笔，逐字抄录《心经》，禅意随墨迹流淌。",
+    "晨课时分，端坐案前，虔诚临摹古帖，字字沉静。",
+    "细读《金刚经》，字句间禅意深远，颇有感悟。",
+    "借窗外月色抄录经文，笔尖沙沙作响，如与古圣对话。",
+    "诵《楞严经》，觉每字每句皆含妙义，悟性日进。",
+  ],
+  散步: [
+    "漫步寺庙回廊，青砖石板踏出悠扬足音，心旷神怡。",
+    "徜徉庭院，檐角飞燕，廊下落花，一派幽雅禅境。",
+    "雨后游廊闲步，翠竹摇风，泥土气息清新，心情舒阔。",
+    "穿行竹林小径，风过竹影相伴，步履从容。",
+    "驻足眺望远山，暮霭斜阳，天际彩云如画，思绪飘远。",
+  ],
+  供奉: [
+    "虔诚拈香供奉，香烟袅袅升腾，心中默念祈愿。",
+    "双手合十，于供台前恭敬奉上香火，誓愿护众生安宁。",
+    "三支清香，恭立佛前，烟雾绕绕，心生莫名宁静。",
+    "供奉鲜花香火，庄严佛像前心生敬畏，杂念皆息。",
+    "点燃祈愿香，轻声诵经，梵音与香雾交织，心澄如水。",
+  ],
+  交友: [
+    "与道友偶遇，互施合十礼，分享近日修行心得。",
+    "结识新道友，同游庭院，互赠吉祥小物，笑声朗朗。",
+    "与道友闲谈间共赏落日，互换禅语，心意相通。",
+    "道友邀共读手抄经卷，席地而坐，禅趣盎然。",
+    "偶遇同修之友，相约共坐禅定，心领神会，相视一笑。",
+  ],
+};
+
+// ── 工具函数 ─────────────────────────────────────────────────
+function pickWeighted(weights: Record<string, number>): string {
+  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (const [key, w] of Object.entries(weights)) {
+    r -= w;
+    if (r <= 0) return key;
+  }
+  return Object.keys(weights)[0];
+}
+
+function randItem<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function isBirthdayToday(birthday: string): boolean {
+  if (!birthday) return false;
+  const today = new Date();
+  const bday = new Date(birthday);
+  return today.getMonth() === bday.getMonth() && today.getDate() === bday.getDate();
+}
+
+/** 根据玩家档案生成当天 AI 修行日志 */
+function generateAgentLogs(
+  profile: PlayerProfile,
+  templeName: string,
+  templeId: number,
+  templeItemsCollected: number[],
+  startLogId: number
+): {
+  entries: ActivityEntry[];
+  incenseCoinDelta: number;
+  meritDelta: number;
+  newSGradeItems: string[];
+  newTempleItemIds: number[];
+} {
+  const weights = TRAINING_WEIGHTS[profile.trainingStyle];
+  const friendProb = PERSONALITY_FRIEND_PROB[profile.personality];
+  const count = 144; // 生成一整天的动态（每10分钟一条，最大支持24小时）
+
+  let baseTime = new Date();
+  const todayDate = baseTime.getDate();
+  const times: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const minsToAdd = 10; // 固定10分钟显示一次动态
+    const nextTime = new Date(baseTime.getTime() + minsToAdd * 60000);
+    if (nextTime.getDate() !== todayDate) {
+      break; 
+    }
+    baseTime = nextTime;
+    times.push(`${String(baseTime.getHours()).padStart(2, "0")}:${String(baseTime.getMinutes()).padStart(2, "0")}`);
+  }
+
+  const entries: ActivityEntry[] = [];
+  let coinDelta = 0;
+  let meritDelta = 0;
+  const newSGradeItems: string[] = [];
+  const newTempleItemIds = [...templeItemsCollected];
+  let logId = startLogId;
+  const todayStr = getToday();
+
+  const STATE_DESCS = [
+    "空气很新鲜啊~",
+    "渐入佳境，心境澄明。",
+    "周遭一片静谧，神清气爽。",
+    "不觉时光流逝，怡然自得。",
+    "微风拂过，带来阵阵禅意。",
+    "沉浸其中，物我两忘。",
+    "专注当下，颇有领悟。"
+  ];
+
+  let prevAction = "";
+
+  for (const time of times) {
+    let action = pickWeighted(weights);
+
+    // 交友需通过性格概率检查，否则改为打坐
+    if (action === "交友" && Math.random() > friendProb) {
+      action = "打坐";
+    }
+
+    let icon: string;
+    let desc: string;
+    let effectText = "";
+
+    switch (action) {
+      case "打坐":
+        icon = "🧘";
+        desc = randItem(ACTION_DESCS.打坐);
+        break;
+      case "抄经":
+        icon = "📖";
+        desc = randItem(ACTION_DESCS.抄经);
+        break;
+      case "散步":
+        icon = "🌿";
+        desc = randItem(ACTION_DESCS.散步);
+        break;
+      case "供奉": {
+        icon = "🕯️";
+        desc = randItem(ACTION_DESCS.供奉);
+        const supplyMerit = 3 + Math.floor(Math.random() * 8);
+        meritDelta += supplyMerit;
+        effectText = `功德 +${supplyMerit}`;
+
+        // S 级信物掉落检查（每寺庙仅触发一次）
+        if (!newTempleItemIds.includes(templeId) && Math.random() < S_GRADE_DROP_CHANCE) {
+          const item = randItem(S_GRADE_ITEMS);
+          newSGradeItems.push(item);
+          newTempleItemIds.push(templeId);
+          desc += `✦ 供奉感应，获得 S 级信物：${item}！`;
+        }
+        break;
+      }
+      case "交友": {
+        icon = "🤝";
+        const monk = randItem(NPC_MONKS_DATA);
+        const interaction = randItem(FRIEND_INTERACTIONS);
+        const baseDesc = randItem(ACTION_DESCS.交友);
+        const friendCoins = 1 + Math.floor(Math.random() * 5);
+        const friendMerit = 1 + Math.floor(Math.random() * 3);
+        coinDelta += friendCoins;
+        meritDelta += friendMerit;
+        desc = `${baseDesc} 与道友「${monk.name}」${interaction}，获赠「${monk.gift}」。`;
+        effectText = `香火钱 +${friendCoins}，功德 +${friendMerit}`;
+        break;
+      }
+      default:
+        icon = "🏯";
+        desc = "在寺庙中修行。";
+    }
+
+    if (action === prevAction) {
+      desc += `（${randItem(STATE_DESCS)}）`;
+    }
+    prevAction = action;
+
+    const fullDesc = effectText ? `${desc}（${effectText}）` : desc;
+    entries.push({ id: logId++, time, date: todayStr, icon, action, desc: fullDesc });
+  }
+
+  return { entries, incenseCoinDelta: coinDelta, meritDelta, newSGradeItems, newTempleItemIds };
+}
+
 // ── 经验公式 ──────────────────────────────────────────────────
 /** 升到下一等级所需经验 */
 export function expRequired(level: number): number {
+  if (level === 0) return 100; // 0级升1级需要100经验（恰好等于首次签到经验）
   return Math.floor(BASE_EXP * Math.pow(level, GROWTH_RATE));
 }
 
 // 等级1~12所需经验预计算（供显示）
-export const EXP_TABLE = Array.from({ length: TOTAL_TEMPLES }, (_, i) =>
-  expRequired(i + 1)
+export const EXP_TABLE = Array.from({ length: TOTAL_TEMPLES + 1 }, (_, i) =>
+  expRequired(i)
 );
 
 // ── 12座寺庙 ──────────────────────────────────────────────────
@@ -84,9 +334,18 @@ export const TWELVE_TEMPLES: Temple[] = [
 export interface ActivityEntry {
   id: number;
   time: string;
+  date?: string;
   icon: string;
   action: string;
   desc: string;
+}
+
+export interface ScheduledLog extends ActivityEntry {
+  triggerTimeStr: string;
+  coinDelta: number;
+  meritDelta: number;
+  newSGradeItem?: string;
+  templeId?: number;
 }
 
 // ── 游戏状态 ──────────────────────────────────────────────────
@@ -100,45 +359,38 @@ export interface GameState {
   dailyLoginDone: boolean; // 今日登录奖励已领取
   dailyTaskDone: boolean;  // 今日结缘任务已完成
   activityLog: ActivityEntry[];
+  scheduledLogs: ScheduledLog[];
   encounterCount: number;  // 累计结缘次数
   nextLogId: number;
+  // ── 新增：玩家档案 ──
+  profile: PlayerProfile | null;
+  currentTempleId: number;       // 当前所在寺庙 (0 表示未解锁任何寺庙)
+  templeItemsCollected: number[]; // 已触发 S 级信物的寺庙 ID
+  sGradeItems: string[];          // 已收集的 S 级信物名称
+  agentLogsGeneratedDay: string;  // 已生成 AI 日志的日期，避免重复生成
+  pendingUnlockedTemples: Temple[]; // 待展示的解锁寺庙弹窗列表
 }
 
 const INITIAL_STATE: GameState = {
-  level: 15, // DEV: 解锁全部寺庙
+  level: 0,
   exp: 0,
-  incenseCoin: 99,
-  merit: 99000,
+  incenseCoin: 30,
+  merit: 0,
   day: 0,
   lastLoginDate: "",
   dailyLoginDone: false,
   dailyTaskDone: false,
   activityLog: [],
+  scheduledLogs: [],
   encounterCount: 0,
   nextLogId: 1,
+  profile: null,
+  currentTempleId: 0,
+  templeItemsCollected: [],
+  sGradeItems: [],
+  agentLogsGeneratedDay: "",
+  pendingUnlockedTemples: [],
 };
-
-const STORAGE_KEY = "anime-temple-game-v2"; // v2: dev unlock all
-
-function loadState(): GameState {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      return { ...INITIAL_STATE, ...JSON.parse(saved) };
-    }
-  } catch {
-    // 读取失败则用初始值
-  }
-  return { ...INITIAL_STATE };
-}
-
-function saveState(state: GameState): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // 存储失败忽略
-  }
-}
 
 function getToday(): string {
   return new Date().toISOString().slice(0, 10);
@@ -150,25 +402,81 @@ function nowTime(): string {
 }
 
 function makeEntry(id: number, icon: string, action: string, desc: string): ActivityEntry {
-  return { id, time: nowTime(), icon, action, desc };
+  return { id, time: nowTime(), date: getToday(), icon, action, desc };
 }
 
 // ── Hook ─────────────────────────────────────────────────────
-export function useGameState() {
-  const [state, setState] = useState<GameState>(loadState);
+export function useGameState(userId: string | null = null) {
+  const [state, setState] = useState<GameState>({ ...INITIAL_STATE });
 
-  // 状态变更后持久化
-  useEffect(() => {
-    saveState(state);
-  }, [state]);
+  /** 云端数据是否已加载，防止在加载完成前就显示页面 */
+  const [isCloudLoaded, setIsCloudLoaded] = useState(false);
 
-  // 始终指向最新 state，供 useIncenseCoin 在 setState 外读取当前香火钱
+  // 始终指向最新 state，供 useIncenseCoin 在 setState 外读取当前香火錢
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
+
+  // ── 首次获到 userId 时，从 Supabase 加载数据────────────────
+  useEffect(() => {
+    if (!userId) return;
+
+    Promise.all([
+      fetchGameState(userId),
+      fetchPlayerProfile(userId),
+    ]).then(([cloudState, cloudProfile]) => {
+      setState(() => {
+        const next = { ...INITIAL_STATE };
+
+        // 直接使用 Supabase 数据（localStorage 已移除）
+        if (cloudState) {
+          next.level = cloudState.level;
+          next.exp = cloudState.exp;
+          next.incenseCoin = cloudState.incense_coin;
+          next.merit = cloudState.merit;
+          next.day = cloudState.day;
+          next.lastLoginDate = cloudState.last_login_date ?? "";
+          next.dailyLoginDone = cloudState.daily_login_done;
+          next.dailyTaskDone = cloudState.daily_task_done;
+          next.encounterCount = cloudState.encounter_count;
+          next.currentTempleId = cloudState.current_temple_id;
+          next.templeItemsCollected = cloudState.temple_items_collected ?? [];
+          next.sGradeItems = cloudState.s_grade_items ?? [];
+          next.agentLogsGeneratedDay = cloudState.agent_logs_generated_day ?? "";
+        }
+
+        if (cloudProfile) {
+          next.profile = cloudProfile as PlayerProfile;
+        }
+
+        return next;
+      });
+
+      setIsCloudLoaded(true);
+    }).catch(e => {
+      console.error("[Supabase] 加载游戏数据失败:", e);
+      setIsCloudLoaded(true); // 即使失败也要解除加载状态
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  // ── 防抖云端同步（state 变更后 2.5s 后写 Supabase）─────────
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!userId || !isCloudLoaded) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      upsertGameState(userId, state).catch(console.error);
+    }, 2500);
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, userId, isCloudLoaded]);
 
   /** 内部：处理连续升级 */
   const processLevelUps = useCallback((s: GameState): GameState => {
     let result = { ...s };
+    result.pendingUnlockedTemples = [...(result.pendingUnlockedTemples || [])];
     while (result.level < TOTAL_TEMPLES) {
       const needed = expRequired(result.level);
       if (result.exp >= needed) {
@@ -176,6 +484,7 @@ export function useGameState() {
         result.level += 1;
         result.merit += 200;
         const temple = TWELVE_TEMPLES[result.level - 1];
+        result.pendingUnlockedTemples.push(temple);
         toast.success(`✨ 升至等级 ${result.level}！`, {
           description: `解锁新寺庙：${temple.name}`,
         });
@@ -191,7 +500,7 @@ export function useGameState() {
   }, []);
 
   /**
-   * 每日登录：领取香火钱 + 经验
+   * 每日登录：领取香火钱 + 经验，并自动生成 AI 修行日志
    * 每个自然日只能领一次，最多第5天
    */
   const doLogin = useCallback(() => {
@@ -207,9 +516,9 @@ export function useGameState() {
       const coins = LOGIN_COIN_REWARDS[dayIdx] ?? LOGIN_COIN_REWARDS[MAX_DAYS - 1];
       const directExp = LOGIN_EXP_REWARD;
 
-      const logId = prev.nextLogId;
-      const entry = makeEntry(
-        logId,
+      let logId = prev.nextLogId;
+      const loginEntry = makeEntry(
+        logId++,
         "🏯",
         `第 ${newDay} 天 · 到达寺庙`,
         `登录奖励：香火钱 +${coins}，经验 +${directExp}`
@@ -224,9 +533,47 @@ export function useGameState() {
         incenseCoin: prev.incenseCoin + coins,
         exp: prev.exp + directExp,
         merit: prev.merit + 50,
-        activityLog: [entry, ...prev.activityLog].slice(0, 30),
-        nextLogId: logId + 1,
+        activityLog: [loginEntry, ...prev.activityLog].slice(0, 200),
+        nextLogId: logId,
       };
+
+      // 生日奖励
+      if (prev.profile && isBirthdayToday(prev.profile.birthday)) {
+        const bdayCoins = 20;
+        const bdayMerit = 100;
+        ns.incenseCoin += bdayCoins;
+        ns.merit += bdayMerit;
+        const bdayEntry = makeEntry(logId++, "🎂", "今日生辰 · 寺庙贺礼", `生日快乐！香火钱 +${bdayCoins}，功德 +${bdayMerit}`);
+        ns.activityLog = [bdayEntry, ...ns.activityLog].slice(0, 200);
+        ns.nextLogId = logId;
+        toast.success("🎂 生辰快乐！", { description: `寺庙赐予生日贺礼：香火钱 +${bdayCoins}，功德 +${bdayMerit}` });
+      }
+
+      // 每日 AI 修行日志（新的一天，且有玩家档案）
+      if (prev.profile && isNewDay && ns.agentLogsGeneratedDay !== today) {
+        const currentTemple = TWELVE_TEMPLES.find(t => t.id === ns.currentTempleId) || TWELVE_TEMPLES[0];
+        const agentResult = generateAgentLogs(
+          prev.profile,
+          currentTemple.name,
+          currentTemple.id,
+          ns.templeItemsCollected,
+          ns.nextLogId
+        );
+        ns.activityLog = [...[...agentResult.entries].reverse(), ...ns.activityLog].slice(0, 200);
+        ns.incenseCoin = Math.max(0, ns.incenseCoin + agentResult.incenseCoinDelta);
+        ns.merit += agentResult.meritDelta;
+        ns.templeItemsCollected = agentResult.newTempleItemIds;
+        ns.sGradeItems = [...(ns.sGradeItems ?? []), ...agentResult.newSGradeItems];
+        ns.nextLogId += agentResult.entries.length;
+        ns.agentLogsGeneratedDay = today;
+
+        if (agentResult.newSGradeItems.length > 0) {
+          toast.success("✦ 供奉感应！获得 S 级信物", {
+            description: agentResult.newSGradeItems.join("，"),
+          });
+        }
+      }
+
       ns = processLevelUps(ns);
 
       toast.success(`第 ${newDay} 天 · 香火已领取`, {
@@ -279,7 +626,7 @@ export function useGameState() {
         exp: prev.exp + totalExp,
         merit: prev.merit + 100,
         encounterCount: prev.encounterCount + 1,
-        activityLog: [...entries, ...prev.activityLog].slice(0, 30),
+        activityLog: [...entries, ...prev.activityLog].slice(0, 200),
         nextLogId: logId,
       };
       ns = processLevelUps(ns);
@@ -295,11 +642,10 @@ export function useGameState() {
 
   /**
    * 香火操作：点香 / 供奉 / 添香
-   * 消耗香火钱，获得经验值
+   * 消耗香火钱，获得经验值；供奉时有概率掉落 S 级信物（每寺庙仅一次）
    */
   const useIncenseCoin = useCallback((action: IncenseAction) => {
     const { cost, exp } = INCENSE_ACTIONS[action];
-    // 在 setState 外读取当前状态，避免 StrictMode 双调用导致 toast 触发两次
     if (stateRef.current.incenseCoin < cost) {
       toast.error("香火钱不足", {
         description: `${action}需要 ${cost} 香火钱`,
@@ -308,16 +654,32 @@ export function useGameState() {
       return;
     }
     setState(prev => {
-      if (prev.incenseCoin < cost) return prev; // 二次保险
+      if (prev.incenseCoin < cost) return prev;
       const icons: Record<IncenseAction, string> = { 点香: "🕯️", 供奉: "🏮", 添香: "🌸" };
       const logId = prev.nextLogId;
-      const entry = makeEntry(logId, icons[action], action, `消耗香火钱 ${cost}，经验 +${exp}`);
+
+      let descExtra = `消耗香火钱 ${cost}，经验 +${exp}`;
+      let newSGradeItems = prev.sGradeItems ?? [];
+      let newTempleItems = prev.templeItemsCollected ?? [];
+
+      // 供奉时检查 S 级信物掉落
+      if (action === "供奉" && !newTempleItems.includes(prev.currentTempleId) && Math.random() < S_GRADE_DROP_CHANCE) {
+        const item = randItem(S_GRADE_ITEMS);
+        newSGradeItems = [...newSGradeItems, item];
+        newTempleItems = [...newTempleItems, prev.currentTempleId];
+        descExtra += ` ✦ 获得 S 级信物：${item}`;
+        toast.success("✦ 供奉感应！获得 S 级信物", { description: item });
+      }
+
+      const entry = makeEntry(logId, icons[action], action, descExtra);
       let ns: GameState = {
         ...prev,
         incenseCoin: prev.incenseCoin - cost,
         exp: prev.exp + exp,
         merit: prev.merit + Math.max(1, Math.floor(exp / 5)),
-        activityLog: [entry, ...prev.activityLog].slice(0, 30),
+        sGradeItems: newSGradeItems,
+        templeItemsCollected: newTempleItems,
+        activityLog: [entry, ...prev.activityLog].slice(0, 200),
         nextLogId: logId + 1,
       };
       ns = processLevelUps(ns);
@@ -329,11 +691,38 @@ export function useGameState() {
     });
   }, [processLevelUps]);
 
+  /** 注册玩家档案（首次进入游戏） */
+  const doRegister = useCallback((profile: PlayerProfile) => {
+    setState(() => {
+      const ns: GameState = {
+        ...INITIAL_STATE,
+        profile,
+        incenseCoin: 30,
+        merit: 0,
+      };
+      toast.success(`欢迎，${profile.name}！✨`, {
+        description: `性格：${profile.personality} · 修行方式：${profile.trainingStyle}`,
+      });
+      return ns;
+    });
+    // 同步档案到云端
+    if (userId) {
+      savePlayerProfile(userId, profile).catch(console.error);
+    }
+  }, [userId]);
+
   /** 重置游戏（调试用） */
   const resetGame = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
     setState({ ...INITIAL_STATE });
     toast.success("修行已重置", { description: "一切归零，重新修行" });
+  }, []);
+
+  /** 确认解锁（关闭新寺庙解锁弹窗） */
+  const acknowledgeUnlock = useCallback((templeId: number) => {
+    setState(prev => ({
+      ...prev,
+      pendingUnlockedTemples: prev.pendingUnlockedTemples.filter(t => t.id !== templeId)
+    }));
   }, []);
 
   // ── 计算属性 ─────────────────────────────────────────────────
@@ -346,16 +735,22 @@ export function useGameState() {
   const todayLoginAvailable = !state.dailyLoginDone;
   const todayTaskAvailable = state.dailyLoginDone && !state.dailyTaskDone;
 
+  const isCloudLoading = !!userId && !isCloudLoaded;
+
   return {
     state,
     expPercent,
     expNeeded: needed,
     isMaxLevel,
+    isCloudLoading,
     todayLoginAvailable,
     todayTaskAvailable,
     doLogin,
     doMorningTask,
     useIncenseCoin,
+    doRegister,
     resetGame,
+    acknowledgeUnlock,
+    setCurrentTempleId: (id: number) => setState(prev => ({ ...prev, currentTempleId: id })),
   };
 }

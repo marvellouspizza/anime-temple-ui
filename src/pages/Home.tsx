@@ -7,14 +7,15 @@
 
 import bgTemple from "@/assets/bg-temple.mp4";
 import bgTempleImg from "@/assets/bg-temple.png";
+import startBgImg from "@/assets/1111.png";
 import pWoman from "@/assets/p-woman.png";
 import pMan from "@/assets/p-man.png";
 import incenseImg from "@/assets/点香.png";
 import gongfengImg from "@/assets/供奉.png";
 import tianxiangImg from "@/assets/添香.png";
 
-// 寺庙图片（eager 预加载，通过名称匹配查找）
-const _templeImageModules = import.meta.glob<string>("../assets/寺庙/*.png", {
+// 寺庙图片（压缩版 WebP，eager 预加载，通过名称匹配查找）
+const _templeImageModules = import.meta.glob<string>("../assets/寺庙_compressed/*.webp", {
   eager: true,
   import: "default",
 });
@@ -38,6 +39,8 @@ function getTempleVideo(name: string): string | null {
 }
 import { useEffect, useRef, useState } from "react";
 import { DraggableCard } from "@/components/DraggableCard";
+import { RegisterCard } from "@/components/RegisterCard";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
@@ -75,13 +78,9 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useGameState, TWELVE_TEMPLES, INCENSE_ACTIONS } from "@/hooks/useGameState";
+import { useSecondMeChat } from "@/hooks/useSecondMeChat";
+import { SecondMeChat, LoginPanel } from "@/components/SecondMeChat";
 
-// ── 成就面板 — 结缘记录静态数据 ─────────────────────────────
-const ACHIEVEMENT_ENCOUNTER_RECENT = [
-  { name: "空心小僧", time: "昨日午时", temple: "拉萨 · 雪寺" },
-  { name: "悟尘行者", time: "三日前",   temple: "云栖 · 竹影寺" },
-  { name: "慧光禅子", time: "七日前",   temple: "京都 · 山寺" },
-];
 
 
 // 从 songs 目录加载真实音乐文件（Vite glob）
@@ -154,6 +153,18 @@ function comingSoon(label: string) {
 export default function Home({ targetSection }: HomeProps) {
   void targetSection;
 
+  const [nowStr, setNowStr] = useState(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
+  useEffect(() => {
+    const t = setInterval(() => {
+      const d = new Date();
+      setNowStr(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+    }, 10000);
+    return () => clearInterval(t);
+  }, []);
+
   // 主题切换
   const { theme, setTheme } = useTheme();
 
@@ -163,8 +174,12 @@ export default function Home({ targetSection }: HomeProps) {
   // 香火动画
   const [flashState, setFlashState] = useState<{ src: string; key: number } | null>(null);
 
+  // 强制 SecondMe 会话
+  const chatState = useSecondMeChat();
+  const supabaseUserId = chatState.supabaseUserId;
+
   // 游戏核心状态
-  const { state, expPercent, todayLoginAvailable, todayTaskAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame } = useGameState();
+  const { state, expPercent, todayLoginAvailable, todayTaskAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame, doRegister, setCurrentTempleId, acknowledgeUnlock, isCloudLoading } = useGameState(supabaseUserId);
 
   // 寺庙概览
   const [showTempleOverview, setShowTempleOverview] = useState(false);
@@ -182,7 +197,7 @@ export default function Home({ targetSection }: HomeProps) {
 
   // 成就面板
   const [showAchievement, setShowAchievement] = useState(false);
-  const [achieveTab, setAchieveTab] = useState<"temples" | "zen" | "encounter">("temples");
+  const [achieveTab, setAchieveTab] = useState<"temples" | "zen" | "encounter" | "relics">("temples");
 
   // 实时动态
   const [liveTab, setLiveTab] = useState<"activity" | "chat">("activity");
@@ -194,13 +209,22 @@ export default function Home({ targetSection }: HomeProps) {
   const [charX, setCharX] = useState<number | null>(null);
   const drag = useRef({ active: false, startMouseX: 0, startCharX: 0 });
 
+  // 云端数据加载完毕后同步神龛背景（云端进度可能高于本地）
+  useEffect(() => {
+    if (!isCloudLoading && state.currentTempleId > 0) {
+      setImmersiveTempleId(prev => (prev === null ? state.currentTempleId : prev));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCloudLoading]);
+
   // 神龛高度同步 → 实时动态面板
   useEffect(() => {
     const el = shrineRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setLiveH(el.offsetHeight));
+    const updateH = () => { const h = el.offsetHeight; if (h > 0) setLiveH(h); };
+    const ro = new ResizeObserver(updateH);
     ro.observe(el);
-    setLiveH(el.offsetHeight);
+    updateH();
     return () => ro.disconnect();
   }, []);
 
@@ -337,8 +361,58 @@ export default function Home({ targetSection }: HomeProps) {
     }
   }, [trackIdx]);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const visibleLogs = state.activityLog.filter((en: any) => {
+    if (!en.date) return true;
+    if (en.date < todayStr) return true;
+    if (en.date > todayStr) return false;
+    return en.time <= nowStr;
+  });
+
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
+      {/* 感应修行记录遮罩 - 防止老玩家首屏闪现注册卡 */}
+      {chatState.authState === "authed" && isCloudLoading && (
+        <div className="fixed inset-0 z-[400] flex flex-col items-center justify-center bg-black/75 backdrop-blur-sm">
+          <div className="text-4xl animate-spin">☸️</div>
+          <p className="mt-4 text-sm text-[var(--gold)] font-title">梵音感应，正在唤醒修行记录…</p>
+        </div>
+      )}
+
+      {/* 首次注册卡片：感应完成后无档案时显示 */}
+      {chatState.authState === "authed" && !state.profile && !isCloudLoading && <RegisterCard onRegister={doRegister} />}
+
+      {/* 强制 SecondMe 登录全屏遮罩 */}
+      {chatState.authState !== "authed" && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/90 backdrop-blur-md">
+          <div className="w-[400px] h-[360px] temple-panel rounded-3xl overflow-hidden p-6 relative">
+            <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/60 pointer-events-none" />
+            <div className="relative z-10 h-full flex flex-col items-center justify-center">
+              <div className="font-title text-3xl text-[var(--gold)] drop-shadow-md mb-8 tracking-widest font-bold">
+                入寺须唤起 SecondMe
+              </div>
+              <div className="w-full bg-black/40 rounded-2xl p-4 ring-1 ring-[var(--gold)]/20 shadow-[0_0_15px_rgba(200,160,80,0.1)]">
+                {chatState.authState === "loading" ? (
+                  <div className="flex h-[180px] flex-col items-center justify-center">
+                    <div className="text-4xl animate-spin mb-4">☸️</div>
+                    <span className="animate-pulse text-sm font-medium text-[var(--gold)]">验证灵根中…</span>
+                  </div>
+                ) : (
+                  <div className="h-[180px]">
+                    <LoginPanel
+                      onOAuth={chatState.startOAuth}
+                      onToken={chatState.loginWithToken}
+                      errorMsg={chatState.errorMsg}
+                      loading={false}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 氛围叠加：光晕 */}
       <div className="absolute inset-0 temple-noise" />
 
@@ -387,10 +461,10 @@ export default function Home({ targetSection }: HomeProps) {
             <div className="relative">
               <Avatar className="h-9 w-9 ring-2 ring-[var(--bronze-green)]/60">
                 <AvatarImage
-                  src="https://images.unsplash.com/photo-1541963463532-d68292c34b19?auto=format&fit=crop&w=256&q=60"
+                  src={state.profile?.avatarUrl ?? "https://images.unsplash.com/photo-1541963463532-d68292c34b19?auto=format&fit=crop&w=256&q=60"}
                   alt="玩家头像"
                 />
-                <AvatarFallback className="bg-black/30">MO</AvatarFallback>
+                <AvatarFallback className="bg-black/30">{state.profile?.name?.[0] ?? "僧"}</AvatarFallback>
               </Avatar>
               <div className="absolute -bottom-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full border border-[var(--bronze-green)]/60 bg-black/45 text-[10px] font-semibold">
                 {state.level}
@@ -399,8 +473,13 @@ export default function Home({ targetSection }: HomeProps) {
 
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="font-title text-lg leading-none text-[var(--cinnabar)]">墨墨</span>
+                <span className="font-title text-lg leading-none text-[var(--cinnabar)]">
+                  {state.profile?.name ?? "小僧"}
+                </span>
                 <span className="text-[10px] text-foreground/60">Lv.{state.level}</span>
+                {state.profile && (
+                  <span className="text-[9px] text-foreground/40">{state.profile.personality} · {state.profile.trainingStyle}</span>
+                )}
               </div>
               <div className="mt-1 flex items-center gap-1.5">
                 <Progress
@@ -562,31 +641,65 @@ export default function Home({ targetSection }: HomeProps) {
           {/* 神龛之窗 */}
           <DraggableCard id="shrine" isUnlocked={isLayoutUnlocked} resizable>
           <div ref={shrineRef} className="temple-shrine-frame">
-            <video
-              key={immersiveTempleId ?? 0}
-              src={immersiveTempleId !== null
-                ? (getTempleVideo(TWELVE_TEMPLES.find(t => t.id === immersiveTempleId)!.name) ?? bgTemple)
-                : bgTemple}
-              autoPlay
-              loop
-              muted
-              playsInline
-            />
+            <AnimatePresence>
+              {state.level === 0 ? (
+                <motion.div
+                  key="dreamy-white"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 1.5, ease: "easeInOut" }}
+                  className="absolute inset-0 overflow-hidden bg-center bg-cover"
+                  style={{ backgroundImage: `url(${startBgImg})` }}
+                >
+                </motion.div>
+              ) : (
+                <motion.video
+                  key={immersiveTempleId ?? 'zero'}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 1.5, ease: "easeInOut" }}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                  src={immersiveTempleId !== null && immersiveTempleId !== 0
+                    ? (getTempleVideo(TWELVE_TEMPLES.find(t => t.id === immersiveTempleId)?.name ?? '') ?? bgTemple)
+                    : bgTemple}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              )}
+            </AnimatePresence>
             {/* 角色立绘 — 调整大小改 h-[72%]，位置改 bottom-0 left-[30%] */}
             <img
               ref={charRef}
-              src={pWoman}
+              src={state.profile?.gender === "男" ? pMan : pWoman}
               alt="角色"
               onMouseDown={onCharMouseDown}
               className={`pointer-events-auto absolute bottom-0 h-[72%] w-auto cursor-grab object-contain object-bottom drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)] select-none active:cursor-grabbing${charX === null ? " left-[30%]" : ""}`}
               style={charX !== null ? { left: charX } : undefined}
             />
-            {/* 小男角色 — 调整 h-[20%] 和 left/bottom 改位置 */}
-            <img
-              src={pMan}
-              alt="小角色"
-              className="pointer-events-none absolute bottom-[30%] left-[10%] h-[20%] w-auto object-contain object-bottom drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] select-none"
-            />
+            {/* 其他僧人（测试显示） */}
+            {MONKS.map((monk, idx) => (
+              <div
+                key={monk.id}
+                className="pointer-events-auto absolute flex flex-col items-center gap-1 cursor-pointer transition-transform hover:scale-110 drop-shadow-md"
+                style={{ bottom: "35%", right: `${15 + idx * 20}%` }}
+                onClick={() => {
+                  setSelectedMonkId(monk.id);
+                  setShowMonksPanel(true);
+                }}
+              >
+                <Avatar className="h-12 w-12 ring-2 ring-[var(--bronze-green)]/60 bg-black/40">
+                  <AvatarImage src={monk.avatarUrl} alt={monk.name} />
+                  <AvatarFallback className="text-white text-sm">{monk.avatarFallback}</AvatarFallback>
+                </Avatar>
+                <div className="rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white/90 whitespace-nowrap">
+                  {monk.name}
+                </div>
+              </div>
+            ))}
           </div>
           </DraggableCard>
 
@@ -620,18 +733,18 @@ export default function Home({ targetSection }: HomeProps) {
               {/* 内容区 */}
               <div className="flex-1 overflow-y-auto px-3 py-3">
                 {liveTab === "activity" ? (
-                  state.activityLog.length === 0 ? (
+                  visibleLogs.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center gap-2 text-center pt-8">
                       <span className="text-2xl opacity-30">🏯</span>
                       <span className="text-xs text-foreground/30">尚未开始修行<br/>签到后动态将显示于此</span>
                     </div>
                   ) : (
                     <div>
-                      {state.activityLog.map((entry, i) => (
+                      {visibleLogs.map((entry, i) => (
                         <div key={entry.id} className="flex gap-2.5">
                           <div className="flex flex-col items-center" style={{ minWidth: 22 }}>
                             <div className="text-base leading-none mt-0.5 shrink-0">{entry.icon}</div>
-                            {i < state.activityLog.length - 1 && (
+                            {i < visibleLogs.length - 1 && (
                               <div className="mt-1.5 flex-1 w-px bg-[var(--bronze-green)]/20" style={{ minHeight: 14 }} />
                             )}
                           </div>
@@ -647,9 +760,7 @@ export default function Home({ targetSection }: HomeProps) {
                     </div>
                   )
                 ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <span className="text-xs text-foreground/30">聊天功能即将开放</span>
-                  </div>
+                  <SecondMeChat chatState={chatState} />
                 )}
               </div>
             </div>
@@ -864,7 +975,7 @@ export default function Home({ targetSection }: HomeProps) {
                         {isUnlocked && (
                           <button
                             className="temple-ornate-btn px-4 py-1.5 text-xs bg-[var(--cinnabar)]/20 ring-1 ring-[var(--cinnabar)]/50 text-white hover:bg-[var(--cinnabar)]/30"
-                            onClick={() => { setImmersiveTempleId(temple.id); setShowTempleOverview(false); setSelectedTempleId(null); }}
+                            onClick={() => { setImmersiveTempleId(temple.id); setCurrentTempleId(temple.id); setShowTempleOverview(false); setSelectedTempleId(null); }}
                           >✦ 到此修行</button>
                         )}
                         <button className="temple-ornate-btn px-4 py-1.5 text-xs" onClick={() => { setShowTempleOverview(false); setSelectedTempleId(null); }}>关闭</button>
@@ -1130,17 +1241,18 @@ export default function Home({ targetSection }: HomeProps) {
             {(() => {
               const unlockedTemples = TWELVE_TEMPLES.filter(t => state.level >= t.unlockLevel);
               return (
-                <div className="grid grid-cols-3 gap-3 px-6 pt-4 pb-3">
+                <div className="grid grid-cols-4 gap-3 px-6 pt-4 pb-3">
                   {[
                     { icon: <Landmark className="h-4 w-4 text-[var(--cinnabar)]" />, label: "修行寺庙", value: unlockedTemples.length, unit: "座" },
                     { icon: <BookOpen className="h-4 w-4 text-[var(--gold)]" />, label: "获得禅语", value: unlockedTemples.length, unit: "则" },
                     { icon: <Heart className="h-4 w-4 text-[#e08080]" />, label: "结缘次数", value: state.encounterCount, unit: "次" },
+                    { icon: <Sparkles className="h-4 w-4 text-[var(--gold)]" />, label: "S级信物", value: (state.sGradeItems ?? []).length, unit: "件" },
                   ].map(({ icon, label, value, unit }) => (
-                    <div key={label} className="temple-pill flex items-center gap-3 px-4 py-3">
+                    <div key={label} className="temple-pill flex items-center gap-2 px-3 py-3">
                       {icon}
                       <div>
-                        <div className="text-[10px] text-foreground/50 tracking-wider">{label}</div>
-                        <div className="font-title text-2xl leading-none text-[var(--gold)]">{value}<span className="text-sm ml-0.5 text-foreground/60">{unit}</span></div>
+                        <div className="text-[9px] text-foreground/50 tracking-wider">{label}</div>
+                        <div className="font-title text-xl leading-none text-[var(--gold)]">{value}<span className="text-xs ml-0.5 text-foreground/60">{unit}</span></div>
                       </div>
                     </div>
                   ))}
@@ -1151,9 +1263,10 @@ export default function Home({ targetSection }: HomeProps) {
             {/* 标签栏 */}
             <div className="flex gap-1.5 px-6 pb-3">
               {([
-                { key: "temples", label: "修行寺庙", icon: <Landmark className="h-3.5 w-3.5" /> },
-                { key: "zen", label: "禅语集", icon: <BookOpen className="h-3.5 w-3.5" /> },
-                { key: "encounter", label: "结缘记录", icon: <Heart className="h-3.5 w-3.5" /> },
+                { key: "temples",  label: "修行寺庙", icon: <Landmark className="h-3.5 w-3.5" /> },
+                { key: "zen",      label: "禅语集",   icon: <BookOpen className="h-3.5 w-3.5" /> },
+                { key: "encounter",label: "结缘记录", icon: <Heart    className="h-3.5 w-3.5" /> },
+                { key: "relics",   label: "信物",     icon: <Sparkles className="h-3.5 w-3.5" /> },
               ] as const).map(({ key, label, icon }) => (
                 <button
                   key={key}
@@ -1269,25 +1382,61 @@ export default function Home({ targetSection }: HomeProps) {
                   <div>
                     <div className="mb-2 flex items-center gap-1.5">
                       <Users className="h-3.5 w-3.5 text-[var(--bronze-green)]" />
-                      <span className="text-xs font-medium text-foreground/70">近期结缘</span>
+                      <span className="text-xs font-medium text-foreground/70">修行日志中的结缘记录</span>
                     </div>
                     <div className="space-y-2">
-                      {ACHIEVEMENT_ENCOUNTER_RECENT.map((enc, i) => (
+                      {state.activityLog
+                        .filter(e => e.icon === "🤝" || e.action === "自发交友" || e.action.includes("交友") || e.action === "结缘一位道友")
+                        .slice(0, 5)
+                        .map((enc, i) => (
                         <div key={i} className="temple-pill flex items-center justify-between px-4 py-2.5">
                           <div className="flex items-center gap-2.5">
                             <div className="grid h-7 w-7 place-items-center rounded-full bg-[var(--gold)]/10 ring-1 ring-[var(--gold)]/20">
-                              <span className="font-title text-sm text-[var(--gold)]">{enc.name[0]}</span>
+                              <span className="text-sm">{enc.icon}</span>
                             </div>
                             <div>
-                              <div className="text-sm text-foreground/85">{enc.name}</div>
-                              <div className="text-[10px] text-foreground/40">{enc.temple}</div>
+                              <div className="text-sm text-foreground/85">{enc.action}</div>
+                              <div className="text-[10px] text-foreground/40 truncate max-w-[200px]">{enc.desc}</div>
                             </div>
                           </div>
-                          <span className="text-[10px] text-foreground/40">{enc.time}</span>
+                          <span className="text-[10px] text-foreground/40 shrink-0">{enc.time}</span>
+                        </div>
+                      ))}
+                      {state.activityLog.filter(e => e.icon === "🤝" || e.action.includes("交友") || e.action === "结缘一位道友").length === 0 && (
+                        <div className="temple-pill flex items-center gap-2 px-4 py-4 opacity-50">
+                          <Users className="h-3.5 w-3.5 text-foreground/30 shrink-0" />
+                          <span className="text-xs text-foreground/45">暂无结缘记录，签到后 AI 会自动与道友相遇</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── S 级信物 ── */}
+              {achieveTab === "relics" && (
+                <div>
+                  {(state.sGradeItems ?? []).length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-10 opacity-60">
+                      <Sparkles className="h-10 w-10 text-foreground/20" />
+                      <div className="text-center">
+                        <div className="text-sm text-foreground/50">尚未获得 S 级信物</div>
+                        <div className="text-[10px] text-foreground/35 mt-1">在寺庙虔诚供奉，有缘者可得珍贵信物</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-3">
+                      {(state.sGradeItems ?? []).map((item, i) => (
+                        <div key={i} className="temple-pill flex flex-col items-center gap-2 py-4 px-3">
+                          <span className="text-3xl">{item.slice(-2)}</span>
+                          <span className="text-[11px] text-[var(--gold)] font-title text-center leading-tight">
+                            {item.replace(/[\u{1F000}-\u{1FFFF}]|[\u2600-\u27BF]|[\u{1F300}-\u{1F9FF}]/gu, "").trim() || item}
+                          </span>
+                          <span className="text-[9px] text-foreground/40">S 级信物</span>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -1326,6 +1475,30 @@ export default function Home({ targetSection }: HomeProps) {
             </div>
 
             <div className="px-6 py-5 space-y-4">
+              {/* 玩家档案摘要 */}
+              {state.profile && (
+                <div className="temple-pill flex items-center gap-3 px-4 py-3">
+                  <div className="h-10 w-10 rounded-full overflow-hidden ring-1 ring-[var(--gold)]/40 shrink-0">
+                    <img src={state.profile.avatarUrl} alt="头像"
+                      className="h-full w-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/bottts/svg?seed=fallback"; }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-title text-base text-[var(--cinnabar)]">{state.profile.name}</span>
+                      <span className="text-[10px] text-foreground/50">{state.profile.gender} · Lv.{state.level}</span>
+                    </div>
+                    <div className="flex gap-1.5 mt-1 flex-wrap">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--bronze-green)]/20 text-[var(--bronze-green)]">{state.profile.personality}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--gold)]/15 text-[var(--gold)]">{state.profile.trainingStyle}</span>
+                      {state.profile.birthday && (
+                        <span className="text-[9px] text-foreground/35">🎂 {state.profile.birthday.slice(5).replace("-", "/")}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* 5天进度 */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1420,6 +1593,67 @@ export default function Home({ targetSection }: HomeProps) {
           </div>
         </div>
       )}
+
+      {/* 寺庙解锁弹窗 */}
+      <AnimatePresence>
+        {state.pendingUnlockedTemples && state.pendingUnlockedTemples.length > 0 && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="temple-panel flex flex-col items-center w-[400px] overflow-hidden rounded-2xl relative shadow-[0_0_80px_-15px_rgba(255,215,0,0.3)]"
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            >
+              {(() => {
+                const templeToUnlock = state.pendingUnlockedTemples[0];
+                return (
+                  <>
+                    <div className="relative w-full h-56">
+                      <img 
+                        src={getTempleImage(templeToUnlock.name)} 
+                        alt={templeToUnlock.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                      {/* 标题叠在图片底部 */}
+                      <div className="absolute bottom-0 left-0 right-0 p-5 text-center">
+                        <div className="text-xs text-white/70 mb-1 tracking-widest">解锁修行第 {templeToUnlock.unlockLevel} 站</div>
+                        <div
+                          className="font-title text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-[#FFF8CC] to-[#FFD700] tracking-wide"
+                          style={{ textShadow: 'none', filter: 'drop-shadow(0 2px 8px rgba(255,215,0,0.6))' }}
+                        >
+                          {templeToUnlock.name}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="px-7 pt-4 pb-6 flex flex-col items-center gap-4 text-center">
+                      <div className="text-sm text-foreground/75 leading-relaxed px-2">
+                        {templeToUnlock.desc}
+                      </div>
+                      <button 
+                        className="temple-ornate-btn px-8 py-2.5 text-[var(--gold)] border border-[var(--gold)]/50 hover:bg-[var(--gold)]/10 transition-all font-medium"
+                        onClick={() => {
+                          setCurrentTempleId(templeToUnlock.id);
+                          setImmersiveTempleId(templeToUnlock.id);
+                          acknowledgeUnlock(templeToUnlock.id);
+                        }}
+                      >
+                        到此修行
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
