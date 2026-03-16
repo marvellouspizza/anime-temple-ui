@@ -459,6 +459,8 @@ export function useGameState(userId: string | null = null) {
           next.templeItemsCollected = cloudState.temple_items_collected ?? [];
           next.sGradeItems = cloudState.s_grade_items ?? [];
           next.agentLogsGeneratedDay = cloudState.agent_logs_generated_day ?? "";
+          next.activityLog = (cloudState.activity_log ?? []) as ActivityEntry[];
+          next.nextLogId = cloudState.next_log_id ?? 1;
         }
 
         if (cloudProfile) {

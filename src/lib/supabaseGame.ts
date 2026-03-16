@@ -22,6 +22,8 @@ interface GameStateLike {
   templeItemsCollected: number[];
   sGradeItems: string[];
   agentLogsGeneratedDay: string;
+  activityLog: object[];
+  nextLogId: number;
 }
 
 export interface PlayerProfileLike {
@@ -47,6 +49,8 @@ export interface CloudGameState {
   temple_items_collected: number[];
   s_grade_items: string[];
   agent_logs_generated_day: string;
+  activity_log: object[];
+  next_log_id: number;
 }
 
 // ── Players 表 ────────────────────────────────────────────────
@@ -158,6 +162,8 @@ export async function upsertGameState(
       temple_items_collected: state.templeItemsCollected,
       s_grade_items: state.sGradeItems,
       agent_logs_generated_day: state.agentLogsGeneratedDay,
+      activity_log: state.activityLog,
+      next_log_id: state.nextLogId,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" }
