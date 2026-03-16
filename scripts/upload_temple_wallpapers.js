@@ -51,6 +51,22 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
 const BUCKET  = "temple-wallpapers";
 const IMG_DIR = join(__dirname, "../src/assets/寺庙");
 
+// 寺庙名称 → ID 映射（与 useGameState.ts 中 TWELVE_TEMPLES 保持一致）
+const TEMPLE_NAME_TO_ID = {
+  "拉萨 · 雪寺":    1,
+  "银涛 · 海风寺":  2,
+  "云栖 · 竹影寺":  3,
+  "烈焰 · 神灯寺":  4,
+  "金光 · 灵塔寺":  5,
+  "星影 · 月殿寺":  6,
+  "清迈 · 森林寺":  7,
+  "峇里岛 · 海风寺": 8,
+  "京都 · 山寺":    9,
+  "云光 · 灵洁寺":  10,
+  "雪羽 · 苍穹寺":  11,
+  "暗月 · 幽冢寺":  12,
+};
+
 async function main() {
   // 1. 创建公开 bucket（已存在则跳过）
   const { error: bucketErr } = await supabase.storage.createBucket(BUCKET, {
@@ -63,7 +79,7 @@ async function main() {
   }
   console.log(`✓ bucket "${BUCKET}" 已就绪\n`);
 
-  // 2. 上传所有 PNG
+  // 2. 上传所有 PNG，使用 ASCII 安全的 temple-{id}.png 作为存储 key
   const files = readdirSync(IMG_DIR).filter((f) => f.endsWith(".png"));
   if (files.length === 0) {
     console.warn("⚠️  src/assets/寺庙/ 下未找到 PNG 文件");
@@ -72,16 +88,23 @@ async function main() {
 
   let success = 0;
   for (const file of files) {
+    const baseName = file.replace(/\.png$/, "");
+    const templeId = TEMPLE_NAME_TO_ID[baseName];
+    if (!templeId) {
+      console.warn(`⚠️  未找到寺庙 ID 映射，跳过: ${file}`);
+      continue;
+    }
+    const storageKey = `temple-${templeId}.png`;
     const data = readFileSync(join(IMG_DIR, file));
     const { error } = await supabase.storage
       .from(BUCKET)
-      .upload(file, data, { contentType: "image/png", upsert: true });
+      .upload(storageKey, data, { contentType: "image/png", upsert: true });
 
     if (error) {
-      console.error(`✗ ${file}  →  ${error.message}`);
+      console.error(`✗ ${file} (${storageKey})  →  ${error.message}`);
     } else {
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${encodeURIComponent(file)}`;
-      console.log(`✓ ${file}\n   ${publicUrl}`);
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storageKey}`;
+      console.log(`✓ ${file} → ${storageKey}\n   ${publicUrl}`);
       success++;
     }
   }

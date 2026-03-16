@@ -10,11 +10,14 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { streamChat, getToken } from "@/lib/secondme";
+import { supabase } from "@/lib/supabase";
 import {
   upsertGameState,
   fetchGameState,
   fetchPlayerProfile,
   savePlayerProfile,
+  updateCachedToken,
+  flushStateBeforeUnload,
 } from "@/lib/supabaseGame";
 
 // ── 核心参数 ──────────────────────────────────────────────────
@@ -22,6 +25,7 @@ const BASE_EXP = 13;
 const GROWTH_RATE = 1.5;
 export const TOTAL_TEMPLES = 12;
 const MAX_DAYS = 5;
+export const MAX_MERIT = 9999;
 
 /** 每日登录香火钱奖励（天1~5） */
 const LOGIN_COIN_REWARDS = [10, 12, 14, 16, 18];
@@ -423,9 +427,65 @@ export function useGameState(userId: string | null = null) {
   /** 云端数据是否已加载，防止在加载完成前就显示页面 */
   const [isCloudLoaded, setIsCloudLoaded] = useState(false);
 
+  // 统一管理待执行的防抖同步计时器
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // 始终指向最新 state，供 useIncenseCoin 在 setState 外读取当前香火錢
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
+
+  const persistStateNow = useCallback((nextState: GameState) => {
+    stateRef.current = nextState;
+    if (!userId || !isCloudLoaded) return;
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+    upsertGameState(userId, nextState).catch((error) => {
+      console.error("[Supabase] 立即存档失败:", error);
+      toast.error("云端存档失败", {
+        description: error instanceof Error ? error.message : "请检查 Supabase 表结构、权限配置或网络状态",
+      });
+    });
+  }, [isCloudLoaded, userId]);
+
+  // ── 订阅 Supabase access token，供 beforeunload keepalive 保存使用 ─
+  useEffect(() => {
+    if (!supabase) return;
+    // 初始化时获取一次
+    supabase.auth.getSession().then(({ data }) => {
+      updateCachedToken(data.session?.access_token ?? null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      updateCachedToken(session?.access_token ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── 页面隐藏/卸载前强制写入，避免最后一次操作丢失 ─────────────
+  useEffect(() => {
+    if (!userId || !isCloudLoaded) return;
+    const flushPendingState = () => {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+      flushStateBeforeUnload(userId, stateRef.current);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushPendingState();
+      }
+    };
+    window.addEventListener("beforeunload", flushPendingState);
+    window.addEventListener("pagehide", flushPendingState);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", flushPendingState);
+      window.removeEventListener("pagehide", flushPendingState);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [userId, isCloudLoaded]);
 
   // 最新的在线玩家名列表（由外部通过 setNearbyPlayerNames 更新）
   const nearbyNamesRef = useRef<string[]>([]);
@@ -467,6 +527,8 @@ export function useGameState(userId: string | null = null) {
           next.profile = cloudProfile as PlayerProfile;
         }
 
+        stateRef.current = next;
+
         return next;
       });
 
@@ -478,18 +540,22 @@ export function useGameState(userId: string | null = null) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // ── 防抖云端同步（state 变更后 2.5s 后写 Supabase）─────────
-  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── 防抖云端同步（用于功德点击等高频更新）───────────────────
   useEffect(() => {
     if (!userId || !isCloudLoaded) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     syncTimerRef.current = setTimeout(() => {
-      upsertGameState(userId, state).catch(console.error);
-    }, 2500);
+      upsertGameState(userId, state).catch((error) => {
+        console.error("[Supabase] 防抖存档失败:", error);
+      });
+      syncTimerRef.current = null;
+    }, 1000);
     return () => {
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+      }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, userId, isCloudLoaded]);
 
   /** 内部：处理连续升级 */
@@ -634,9 +700,11 @@ export function useGameState(userId: string | null = null) {
       }
       ns.pendingReward = { title: `第 ${newDay} 天 · 香火已领取`, lines: rewardLines };
 
+      persistStateNow(ns);
+
       return ns;
     });
-  }, [processLevelUps]);
+  }, [persistStateNow, processLevelUps]);
 
   /**
    * 结缘修行任务：每日一次，获经验+香火钱
@@ -697,9 +765,11 @@ export function useGameState(userId: string | null = null) {
       }
       ns.pendingReward = { title: "结缘圆满！", lines: rewardLines };
 
+      persistStateNow(ns);
+
       return ns;
     });
-  }, [processLevelUps]);
+  }, [persistStateNow, processLevelUps]);
 
   /**
    * 香火操作：点香 / 供奉 / 添香
@@ -744,13 +814,14 @@ export function useGameState(userId: string | null = null) {
         nextLogId: logId + 1,
       };
       ns = processLevelUps(ns);
+      persistStateNow(ns);
       return ns;
     });
     toast.success(`${action}祈愿`, {
       description: `经验 +${exp}`,
       classNames: { description: 'exp-highlight' }
     });
-  }, [processLevelUps]);
+  }, [persistStateNow, processLevelUps]);
 
   /** 注册玩家档案（首次进入游戏） */
   const doRegister = useCallback((profile: PlayerProfile) => {
@@ -761,6 +832,7 @@ export function useGameState(userId: string | null = null) {
         incenseCoin: 0,
         merit: 0,
       };
+      persistStateNow(ns);
       toast.success(`欢迎，${profile.name}！✨`, {
         description: `性格：${profile.personality} · 修行方式：${profile.trainingStyle}`,
       });
@@ -770,18 +842,19 @@ export function useGameState(userId: string | null = null) {
     if (userId) {
       savePlayerProfile(userId, profile).catch(console.error);
     }
-  }, [userId]);
+  }, [persistStateNow, userId]);
 
   /** 重置游戏（调试用） */
   const resetGame = useCallback(() => {
     const fresh = { ...INITIAL_STATE };
+    stateRef.current = fresh;
     setState(fresh);
     // 立即同步到云端，避免重新加载后恢复旧数据
     if (userId) {
-      upsertGameState(userId, fresh).catch(console.error);
+      persistStateNow(fresh);
     }
     toast.success("修行已重置", { description: "一切归零，重新修行" });
-  }, [userId]);
+  }, [persistStateNow, userId]);
 
   /** 确认解锁（关闭新寺庙解锁弹窗） */
   const acknowledgeUnlock = useCallback((templeId: number) => {
@@ -825,5 +898,24 @@ export function useGameState(userId: string | null = null) {
     acknowledgeReward,
     setCurrentTempleId: (id: number) => setState(prev => ({ ...prev, currentTempleId: id })),
     setNearbyPlayerNames,
+    tapMerit: () => setState(prev => {
+      if (prev.merit >= MAX_MERIT) return prev;
+      const newMerit = prev.merit + 1;
+      if (newMerit === MAX_MERIT) {
+        return {
+          ...prev,
+          merit: newMerit,
+          incenseCoin: prev.incenseCoin + 100,
+          pendingReward: {
+            title: "✦ 功德圆满 ✦",
+            lines: [
+              "🙏 功德值已达最高境界 9999！",
+              "🪙 获得香火钱 +100 作为供奉嘉奖",
+            ],
+          },
+        };
+      }
+      return { ...prev, merit: newMerit };
+    }),
   };
 }

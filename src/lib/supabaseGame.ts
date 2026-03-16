@@ -26,6 +26,54 @@ interface GameStateLike {
   nextLogId: number;
 }
 
+// ── 模块级 access token 缓存（用于 beforeunload keepalive 保存）─
+let _cachedToken: string | null = null;
+export function updateCachedToken(token: string | null) {
+  _cachedToken = token;
+}
+
+/**
+ * 在页面卸载前（beforeunload）调用，使用 keepalive fetch 强制写入。
+ * 普通的 async upsertGameState 在组件卸载时会被中断，此函数可靠完成请求。
+ */
+export function flushStateBeforeUnload(userId: string, state: GameStateLike): void {
+  const supabaseUrl = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPABASE_URL;
+  const supabaseKey = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey || !_cachedToken) return;
+
+  const body = JSON.stringify({
+    user_id: userId,
+    level: state.level,
+    exp: state.exp,
+    incense_coin: state.incenseCoin,
+    merit: state.merit,
+    day: state.day,
+    last_login_date: state.lastLoginDate,
+    daily_login_done: state.dailyLoginDone,
+    daily_task_done: state.dailyTaskDone,
+    encounter_count: state.encounterCount,
+    current_temple_id: state.currentTempleId,
+    temple_items_collected: state.templeItemsCollected,
+    s_grade_items: state.sGradeItems,
+    agent_logs_generated_day: state.agentLogsGeneratedDay,
+    activity_log: state.activityLog,
+    next_log_id: state.nextLogId,
+    updated_at: new Date().toISOString(),
+  });
+
+  fetch(`${supabaseUrl}/rest/v1/game_states`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": supabaseKey,
+      "Authorization": `Bearer ${_cachedToken}`,
+      "Prefer": "resolution=merge-duplicates,return=minimal",
+    },
+    body,
+    keepalive: true,
+  }).catch(() => {/* 页面卸载时静默忽略错误 */});
+}
+
 export interface PlayerProfileLike {
   name: string;
   gender: string;
@@ -168,8 +216,16 @@ export async function upsertGameState(
     },
     { onConflict: "user_id" }
   );
-  if (error)
-    console.error("[Supabase] game_states upsert error:", error.message);
+  if (error) {
+    const errorInfo = {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    };
+    console.error("[Supabase] game_states upsert error:", JSON.stringify(errorInfo));
+    throw new Error(JSON.stringify(errorInfo));
+  }
 }
 
 /**
@@ -186,7 +242,12 @@ export async function fetchGameState(
     .maybeSingle();
 
   if (error) {
-    console.error("[Supabase] fetchGameState error:", error.message);
+    console.error("[Supabase] fetchGameState error:", JSON.stringify({
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    }));
     return null;
   }
   return data as CloudGameState | null;
