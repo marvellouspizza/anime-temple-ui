@@ -79,11 +79,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  let userId: string;
-  try {
-    userId = await resolveUserId(req.headers.authorization);
-  } catch (err: unknown) {
-    return res.status(401).json({ error: err instanceof Error ? err.message : "Unauthorized" });
+  // tools/list (used by platform validator) does NOT require auth.
+  // tools/call requires a valid SecondMe bearer token.
+  const requestMethod = req.body?.method as string | undefined;
+  const requiresAuth = requestMethod === "tools/call";
+
+  let userId: string | null = null;
+  if (requiresAuth) {
+    try {
+      userId = await resolveUserId(req.headers.authorization);
+    } catch (err: unknown) {
+      return res.status(401).json({ error: err instanceof Error ? err.message : "Unauthorized" });
+    }
   }
 
   const server = new Server(
@@ -95,6 +102,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+
+    if (!userId) {
+      return {
+        content: [{ type: "text" as const, text: "此工具需要 SecondMe 授权，请先完成 OAuth 登录。" }],
+        isError: true,
+      };
+    }
 
     // players.id IS the secondme userId (see upsertPlayerSecondMe)
     const { data: player } = await supabase
