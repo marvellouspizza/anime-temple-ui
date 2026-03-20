@@ -193,7 +193,7 @@ export default function Home({ targetSection }: HomeProps) {
   const supabaseUserId = chatState.supabaseUserId;
 
   // 游戏核心状态
-  const { state, expPercent, todayLoginAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame, speedRun, doRegister, setCurrentTempleId, acknowledgeUnlock, acknowledgeReward, isCloudLoading, setNearbyPlayerNames, tapMerit } = useGameState(supabaseUserId);
+  const { state, expPercent, todayLoginAvailable, doLogin, doMorningTask, useIncenseCoin, resetGame, speedRun, doRegister, setCurrentTempleId, acknowledgeUnlock, acknowledgeReward, isCloudLoading, setNearbyPlayerNames, pushActivityEntry, tapMerit } = useGameState(supabaseUserId);
 
   // 寺庙概览
   const [showTempleOverview, setShowTempleOverview] = useState(false);
@@ -244,10 +244,22 @@ export default function Home({ targetSection }: HomeProps) {
   const friendChat = useFriendChat(supabaseUserId ?? null);
   // 缓存 pending 请求的 requester 档案信息
   const [pendingProfiles, setPendingProfiles] = useState<Record<string, { name: string; avatar: string }>>({});
+  const prevPendingIdsRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const ids = friendChat.pendingRequests.map(r => r.requester);
     if (ids.length === 0) { setPendingProfiles({}); return; }
-    fetchPlayersByIds(ids).then(setPendingProfiles);
+    fetchPlayersByIds(ids).then(profiles => {
+      setPendingProfiles(profiles);
+      // 检测新到来的申请并写入修行动态
+      for (const req of friendChat.pendingRequests) {
+        if (!prevPendingIdsRef.current.has(req.id)) {
+          const name = profiles[req.requester]?.name ?? "道友";
+          pushActivityEntry("📩", "收到结缘申请", `「${name}」向你发起结缘，请在道友页面回应`);
+        }
+      }
+      prevPendingIdsRef.current = new Set(friendChat.pendingRequests.map(r => r.id));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [friendChat.pendingRequests]);
 
   // 同步在线玩家名到 useGameState（供 AI 日志交友使用）
@@ -262,7 +274,7 @@ export default function Home({ targetSection }: HomeProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // AI 自动结缘：当检测到附近有其他玩家时自动触发
+  // AI 自动结缘：当检测到附近有其他玩家时，随机选择 1~3 人发起结缘
   const autoEncounterFiredRef = useRef(false);
   useEffect(() => {
     if (
@@ -274,12 +286,26 @@ export default function Home({ targetSection }: HomeProps) {
       autoEncounterFiredRef.current = true;
       doMorningTask();
 
-      // AI 自动向在场的随机一位玩家发送好友申请
-      const target = nearbyMonks[Math.floor(Math.random() * nearbyMonks.length)];
-      if (target) {
+      // 随机选 1~3 位（不超过在场人数）发起结缘
+      const count = Math.min(
+        Math.floor(Math.random() * 3) + 1,
+        nearbyMonks.length
+      );
+      const shuffled = [...nearbyMonks].sort(() => Math.random() - 0.5);
+      const targets = shuffled.slice(0, count);
+
+      for (const target of targets) {
         friendChat.requestFriend(target.id).then(result => {
           if (result.ok) {
-            toast.success(`AI 修行中与「${target.name}」结缘`, { description: result.msg });
+            const isMutual = result.msg.includes("自动结为道友");
+            if (isMutual) {
+              // 双方互发申请，直接成为好友
+              pushActivityEntry("🤝", "结缘一位道友", `与「${target.name}」双方互发结缘，已喜结道友`);
+              toast.success(`与「${target.name}」喜结道友！`, { description: result.msg });
+            } else {
+              // 单方发起（doMorningTask 已写"发起结缘"日志）
+              toast.success(`AI 分身向「${target.name}」发起结缘`, { description: result.msg });
+            }
           }
           // 已是好友 / 已申请过 → 静默忽略
         });
@@ -295,6 +321,7 @@ export default function Home({ targetSection }: HomeProps) {
   // 实时动态
   const [liveTab, setLiveTab] = useState<"activity" | "chat">("activity");
   const [liveH, setLiveH] = useState(480);
+  const [viewDay, setViewDay] = useState<"today" | "yesterday">("today");
 
   // 角色左右拖拽
   const shrineRef = useRef<HTMLDivElement>(null);
@@ -457,12 +484,40 @@ export default function Home({ targetSection }: HomeProps) {
   }, [trackIdx]);
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const visibleLogs = state.activityLog.filter((en: any) => {
-    if (!en.date) return true;
-    if (en.date < todayStr) return true;
-    if (en.date > todayStr) return false;
-    return en.time <= nowStr;
-  });
+  const yesterdayStr = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const visibleLogs = [...state.activityLog]
+    .filter((en: any) => {
+      if (viewDay === "yesterday") {
+        return en.date === yesterdayStr;
+      }
+      // 今日视图：只显示今天到当前时刻的条目
+      if (!en.date) return true;
+      if (en.date !== todayStr) return false;
+      return en.time <= nowStr;
+    })
+    .sort((a: any, b: any) => {
+      if (a.time !== b.time) return a.time < b.time ? 1 : -1;
+      return b.id - a.id;
+    });
+
+  const hasYesterdayLogs = state.activityLog.some((e: any) => e.date === yesterdayStr);
+
+  // 将连续相同的点香/供奉/添香合并为一条，显示 ×N
+  const COLLAPSIBLE_ACTIONS = new Set(['点香', '供奉', '添香']);
+  type DisplayEntry = { entry: typeof visibleLogs[0]; count: number };
+  const displayLogs: DisplayEntry[] = [];
+  for (const entry of visibleLogs) {
+    const last = displayLogs[displayLogs.length - 1];
+    if (last && COLLAPSIBLE_ACTIONS.has(entry.action) && last.entry.action === entry.action) {
+      last.count++;
+    } else {
+      displayLogs.push({ entry, count: 1 });
+    }
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
@@ -619,7 +674,7 @@ export default function Home({ targetSection }: HomeProps) {
               title="道友列表"
             >
               <Heart className="h-4 w-4 text-[var(--bronze-green)]" />
-              {(friendChat.pendingRequests.length > 0 || friendChat.friends.some(f => f.unread > 0)) && (
+              {(friendChat.pendingRequests.length > 0 || friendChat.sentRequests.length > 0 || friendChat.friends.some(f => f.unread > 0)) && (
                 <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--cinnabar)] animate-pulse" />
               )}
             </button>
@@ -719,7 +774,7 @@ export default function Home({ targetSection }: HomeProps) {
               {([
                 { label: "寺庙概览", icon: <Landmark     className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
                 { label: "其他僧人", icon: <Users        className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
-                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
+                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.sentRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
                 { label: "今日修行", icon: <CalendarCheck className="h-5 w-5" />, onClick: () => setShowDailyPanel(true) },
                 { label: "成就",     icon: <Trophy       className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
               ] as { label: string; icon: React.ReactNode; onClick: () => void; badge?: number }[]).map(({ label, icon, onClick, badge }) => (
@@ -859,7 +914,7 @@ export default function Home({ targetSection }: HomeProps) {
                 {(["activity", "chat"] as const).map(tab => (
                   <button
                     key={tab}
-                    onClick={() => setLiveTab(tab)}
+                    onClick={() => { setLiveTab(tab); if (tab !== "activity") setViewDay("today"); }}
                     className={`flex-1 rounded-lg py-1 text-xs font-medium transition-colors ${
                       liveTab === tab
                         ? "bg-[var(--gold)]/20 text-[var(--gold)] ring-1 ring-[var(--gold)]/40"
@@ -870,6 +925,27 @@ export default function Home({ targetSection }: HomeProps) {
                   </button>
                 ))}
               </div>
+              {/* 修行动态日期切换：今日 / 昨日 */}
+              {liveTab === "activity" && (
+                <div className="flex gap-1 px-2 pb-1.5">
+                  {(["today", "yesterday"] as const).map(day => (
+                    <button
+                      key={day}
+                      onClick={() => setViewDay(day)}
+                      disabled={day === "yesterday" && !hasYesterdayLogs}
+                      className={`flex-1 rounded-md py-0.5 text-[10px] font-medium transition-colors ${
+                        viewDay === day
+                          ? "bg-[var(--bronze-green)]/30 text-[var(--bronze-green)] ring-1 ring-[var(--bronze-green)]/40"
+                          : day === "yesterday" && !hasYesterdayLogs
+                            ? "text-foreground/20 cursor-not-allowed"
+                            : "text-foreground/40 hover:text-foreground/70"
+                      }`}
+                    >
+                      {day === "today" ? "今日" : "昨日"}
+                    </button>
+                  ))}
+                </div>
+              )}
               {/* 分割线 */}
               <div className="mx-3 h-px bg-[var(--bronze-green)]/20" />
               {/* 描述区 */}
@@ -881,18 +957,31 @@ export default function Home({ targetSection }: HomeProps) {
               {/* 内容区 */}
               <div className="flex-1 overflow-y-auto px-3 py-3">
                 {liveTab === "activity" ? (
-                  visibleLogs.length === 0 ? (
+                  displayLogs.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center gap-2 text-center pt-8">
                       <span className="text-2xl opacity-30">🏯</span>
-                      <span className="text-xs text-foreground/30">尚未开始修行<br/>签到后动态将显示于此</span>
+                      <span className="text-xs text-foreground/30">
+                        {viewDay === "yesterday" ? "暂无昨日修行记录" : "尚未开始修行"}
+                        <br/>
+                        {viewDay === "yesterday" ? "昨日日志将在签到后保存" : "签到后动态将显示于此"}
+                      </span>
                     </div>
                   ) : (
                     <div>
-                      {visibleLogs.map((entry, i) => (
+                      {displayLogs.map(({ entry, count }, i) => {
+                        // 合并条目的聚合描述
+                        let displayDesc = entry.desc;
+                        if (count > 1 && COLLAPSIBLE_ACTIONS.has(entry.action)) {
+                          const def = INCENSE_ACTIONS[entry.action as keyof typeof INCENSE_ACTIONS];
+                          if (def) {
+                            displayDesc = `消耗香火钱 ${def.cost * count}，经验 +${def.exp * count}`;
+                          }
+                        }
+                        return (
                         <div key={entry.id} className="flex gap-2.5">
                           <div className="flex flex-col items-center" style={{ minWidth: 22 }}>
                             <div className="text-base leading-none mt-0.5 shrink-0">{entry.icon}</div>
-                            {i < visibleLogs.length - 1 && (
+                            {i < displayLogs.length - 1 && (
                               <div className="mt-1.5 flex-1 w-px bg-[var(--bronze-green)]/20" style={{ minHeight: 14 }} />
                             )}
                           </div>
@@ -900,11 +989,15 @@ export default function Home({ targetSection }: HomeProps) {
                             <div className="flex items-baseline gap-1.5 flex-wrap">
                               <span className="text-[10px] text-foreground/40 tabular-nums shrink-0">{entry.time}</span>
                               <span className="text-xs font-medium text-foreground/85 leading-snug">{entry.action}</span>
+                              {count > 1 && (
+                                <span className="text-[10px] font-bold text-[var(--gold)]/80 leading-none px-1 rounded bg-[var(--gold)]/10">×{count}</span>
+                              )}
                             </div>
-                            <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">{entry.desc}</p>
+                            <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">{displayDesc}</p>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )
                 ) : (
@@ -1740,13 +1833,20 @@ export default function Home({ targetSection }: HomeProps) {
               friends={friendChat.friends}
               pendingRequests={friendChat.pendingRequests}
               pendingProfiles={pendingProfiles}
+              sentRequests={friendChat.sentRequests}
               activeChatPeerId={friendChat.activeChatPeerId}
               messages={friendChat.messages}
               isSending={friendChat.isSending}
               onOpenChat={friendChat.openChat}
               onCloseChat={friendChat.closeChat}
               onSend={friendChat.send}
-              onAccept={(id) => { friendChat.acceptRequest(id); toast.success("已结为道友"); }}
+              onAccept={(id) => {
+                const req = friendChat.pendingRequests.find(r => r.id === id);
+                const peerName = req ? (pendingProfiles[req.requester]?.name ?? "道友") : "道友";
+                friendChat.acceptRequest(id);
+                pushActivityEntry("🤝", "结缘一位道友", `接受「${peerName}」的结缘申请，已互为道友`);
+                toast.success(`与「${peerName}」喜结道友！`);
+              }}
               onReject={(id) => { friendChat.rejectRequest(id); }}
               onClose={() => { setShowFriendPanel(false); friendChat.closeChat(); }}
             />
