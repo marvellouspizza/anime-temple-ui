@@ -148,7 +148,155 @@ const ACTION_DESCS: Record<string, string[]> = {
     "道友邀共读手抄经卷，席地而坐，禅趣盎然。",
     "偶遇同修之友，相约共坐禅定，心领神会，相视一笑。",
   ],
+  // ── 日常生活行为 ──
+  晨起: [
+    "清晨钟声响起，起身洗漱，迎接新的一天。",
+    "天蒙蒙亮便已起身，整理僧衣，准备早课。",
+    "闻鸡鸣而起，推窗见晨雾缭绕，精神抖擞。",
+    "晨光微露，叠好被褥，恭敬地走出禅房。",
+  ],
+  早课: [
+    "随师兄们齐聚大殿，诵读早课经文，梵音回荡。",
+    "晨钟暮鼓中，双手合十虔诵《楞严咒》，声声入心。",
+    "大殿早课开始，列队诵经，晨光透过窗棂洒在经卷上。",
+    "随众僧诵《大悲咒》，声势浑厚，心生肃穆。",
+  ],
+  早斋: [
+    "斋堂内安静用早餐，一碗清粥配几样小菜，简单而满足。",
+    "早斋时分，白粥馒头佐以腐乳咸菜，细嚼慢咽，心怀感恩。",
+    "用罢早斋，一碗热豆浆暖胃，精神饱满迎接新的修行。",
+    "斋堂落座，默念供养偈后开始进食，粗茶淡饭亦觉甘甜。",
+  ],
+  午斋: [
+    "午时已到，前往斋堂用午膳，素菜清淡可口。",
+    "午斋丰盛，豆腐青菜白饭，食之有味，心存感恩。",
+    "过堂午斋，依律默然而食，一饭一菜皆是修行。",
+    "午斋时分，与师兄们依序落座，素食三菜一汤，简朴而知足。",
+  ],
+  午休: [
+    "午后小憩片刻，养足精神以备下午修行。",
+    "日正当中，回禅房稍事休息，闭目养神。",
+    "午后困意袭来，于榻上小歇，听窗外蝉鸣声声。",
+    "午休时分，半倚窗边微眯，风送花香入梦来。",
+  ],
+  晚课: [
+    "傍晚随众僧晚课诵经，暮鼓声中心渐沉静。",
+    "晚课钟声敲响，齐聚大殿诵《阿弥陀经》，灯火通明。",
+    "日落时分参加晚课，梵唱声中回顾一日修行所得。",
+    "晚课合十恭立，随经声忏悔精进，心中满怀法喜。",
+  ],
+  药石: [
+    "药石时分，简单用些稀饭小菜，不宜过饱。",
+    "傍晚药石，一碗面条几片青菜，清淡知足。",
+    "药石过后，收拾碗筷，心中感念施主供养之恩。",
+    "晚间药石简朴，半碗米粥搭配腌菜，修行人不贪口腹。",
+  ],
+  祈福: [
+    "夜色渐深，于佛前点灯祈福，愿众生离苦得乐。",
+    "暮色中立于佛像前，双手合十默念祈愿，心意虔诚。",
+    "点亮莲花灯一盏，祈愿世间平安，灯火映照面庞。",
+    "晚间祈福，轻声许下愿望，烛光摇曳中心生暖意。",
+  ],
+  寺务: [
+    "打扫庭院落叶，将寺中环境收拾得干干净净。",
+    "帮忙整理藏经阁书籍，将散乱的经卷归位。",
+    "与师兄们一起修缮寺中园圃，种下几株新苗。",
+    "协助打理佛堂香烛，将供台擦拭得一尘不染。",
+    "修剪庭院中的花草树木，劳作之中亦是修行。",
+  ],
+  活动: [
+    "寺庙组织禅茶会，与众人品茶论道，其乐融融。",
+    "参加寺中书法交流会，挥毫泼墨，互相切磋。",
+    "寺庙举行放生仪式，将鱼苗放入溪流，功德无量。",
+    "参与寺庙组织的经文研讨会，聆听法师开示，受益良多。",
+    "寺中举办药师法会，随众诵经祈福，场面庄严肃穆。",
+    "参加师父组织的行脚活动，沿山路缓行，步步皆禅。",
+  ],
+  散步晚: [
+    "饭后沿寺外小径散步消食，晚风习习，十分惬意。",
+    "漫步于后山小路，月色如水洒在青石上，心旷神怡。",
+    "于庭院中缓步而行，仰望星空点点，思绪悠远。",
+    "循檐下回廊闲走，远处灯火阑珊，夜色宁静。",
+  ],
+  就寝: [
+    "夜深人静，回禅房安寝，今日修行圆满。",
+    "合掌回向后入眠，愿诸佛菩萨护佑。",
+    "熄灯就寝，伴着远处隐约的钟声渐入梦乡。",
+    "一日修行已毕，安然入睡，梦中亦闻梵音。",
+    "倦意袭来，于榻上闭目，今日无事挂心头。",
+  ],
+  睡眠: [
+    "正在安睡中……zzZ",
+    "沉沉入梦，禅房内一片寂静。",
+    "酣然入梦……",
+    "夜深沉睡，一夜好眠。",
+  ],
 };
+
+/**
+ * 基于真实时间的作息时间表
+ * 每个时间段指定固定活动（fixed）或从修行权重中随机选（weighted）
+ * hour 为 24 小时制
+ */
+interface ScheduleSlot {
+  startHour: number; // 开始小时（含）
+  startMin: number;  // 开始分钟（含）
+  endHour: number;   // 结束小时（含）
+  endMin: number;    // 结束分钟（不含）
+  action: string;    // 活动类型
+  icon: string;      // 显示图标
+  type: "fixed" | "weighted"; // fixed=固定活动, weighted=修行随机
+}
+
+const DAILY_SCHEDULE: ScheduleSlot[] = [
+  // 凌晨 ~ 早起前：睡眠
+  { startHour: 0,  startMin: 0,  endHour: 5,  endMin: 0,  action: "睡眠", icon: "😴", type: "fixed" },
+  // 5:00-5:20 晨起
+  { startHour: 5,  startMin: 0,  endHour: 5,  endMin: 20, action: "晨起", icon: "🌅", type: "fixed" },
+  // 5:20-6:00 早课
+  { startHour: 5,  startMin: 20, endHour: 6,  endMin: 0,  action: "早课", icon: "📿", type: "fixed" },
+  // 6:00-6:30 早斋
+  { startHour: 6,  startMin: 0,  endHour: 6,  endMin: 30, action: "早斋", icon: "🍵", type: "fixed" },
+  // 6:30-8:00 上午修行（权重随机：打坐/抄经等）
+  { startHour: 6,  startMin: 30, endHour: 8,  endMin: 0,  action: "",     icon: "",   type: "weighted" },
+  // 8:00-8:30 寺务劳作
+  { startHour: 8,  startMin: 0,  endHour: 8,  endMin: 30, action: "寺务", icon: "🧹", type: "fixed" },
+  // 8:30-11:00 上午修行
+  { startHour: 8,  startMin: 30, endHour: 11, endMin: 0,  action: "",     icon: "",   type: "weighted" },
+  // 11:00-11:40 午斋
+  { startHour: 11, startMin: 0,  endHour: 11, endMin: 40, action: "午斋", icon: "🍚", type: "fixed" },
+  // 11:40-13:00 午休
+  { startHour: 11, startMin: 40, endHour: 13, endMin: 0,  action: "午休", icon: "💤", type: "fixed" },
+  // 13:00-15:00 下午修行
+  { startHour: 13, startMin: 0,  endHour: 15, endMin: 0,  action: "",     icon: "",   type: "weighted" },
+  // 15:00-16:00 寺庙活动
+  { startHour: 15, startMin: 0,  endHour: 16, endMin: 0,  action: "活动", icon: "🎋", type: "fixed" },
+  // 16:00-17:00 下午修行
+  { startHour: 16, startMin: 0,  endHour: 17, endMin: 0,  action: "",     icon: "",   type: "weighted" },
+  // 17:00-17:40 晚课
+  { startHour: 17, startMin: 0,  endHour: 17, endMin: 40, action: "晚课", icon: "📿", type: "fixed" },
+  // 17:40-18:10 药石（晚餐）
+  { startHour: 17, startMin: 40, endHour: 18, endMin: 10, action: "药石", icon: "🍜", type: "fixed" },
+  // 18:10-19:00 散步
+  { startHour: 18, startMin: 10, endHour: 19, endMin: 0,  action: "散步晚", icon: "🌙", type: "fixed" },
+  // 19:00-20:30 祈福/自由修行
+  { startHour: 19, startMin: 0,  endHour: 20, endMin: 30, action: "祈福", icon: "🙏", type: "fixed" },
+  // 20:30-21:00 就寝准备
+  { startHour: 20, startMin: 30, endHour: 21, endMin: 0,  action: "就寝", icon: "🛏️", type: "fixed" },
+  // 21:00-23:59 睡眠
+  { startHour: 21, startMin: 0,  endHour: 24, endMin: 0,  action: "睡眠", icon: "😴", type: "fixed" },
+];
+
+/** 根据 HH:MM 格式时间查找对应的时间表活动 */
+function getScheduledAction(timeStr: string): ScheduleSlot | undefined {
+  const [h, m] = timeStr.split(":").map(Number);
+  const totalMin = h * 60 + m;
+  return DAILY_SCHEDULE.find(slot => {
+    const start = slot.startHour * 60 + slot.startMin;
+    const end = slot.endHour * 60 + slot.endMin;
+    return totalMin >= start && totalMin < end;
+  });
+}
 
 // ── 工具函数 ─────────────────────────────────────────────────
 function pickWeighted(weights: Record<string, number>): string {
@@ -190,16 +338,17 @@ function generateAgentLogs(
 } {
   const weights = TRAINING_WEIGHTS[profile.trainingStyle];
   const friendProb = PERSONALITY_FRIEND_PROB[profile.personality];
-  const count = 144; // 生成一整天的动态（每10分钟一条，最大支持24小时）
 
-  let baseTime = new Date();
-  const todayDate = baseTime.getDate();
+  // 从当天 05:00 开始生成全天日程（不管用户何时登录，保证修行动态始终完整）
+  const genDayStr = getToday();
+  let baseTime = new Date(genDayStr + "T04:50:00"); // 初始 4:50，+10min 首条 = 05:00
+  const calendarDay = baseTime.getDate();
   const times: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const minsToAdd = 10; // 固定10分钟显示一次动态
+  for (let i = 0; i < 144; i++) {
+    const minsToAdd = 10;
     const nextTime = new Date(baseTime.getTime() + minsToAdd * 60000);
-    if (nextTime.getDate() !== todayDate) {
-      break; 
+    if (nextTime.getDate() !== calendarDay) {
+      break; // 到达次日零时停止，保持日期一致
     }
     baseTime = nextTime;
     times.push(`${String(baseTime.getHours()).padStart(2, "0")}:${String(baseTime.getMinutes()).padStart(2, "0")}`);
@@ -227,68 +376,77 @@ function generateAgentLogs(
   let prevAction = "";
 
   for (const time of times) {
-    let action = pickWeighted(weights);
-
-    // 无真实玩家在场时，交友直接改为打坐（不使用 NPC）
-    if (action === "交友" && (!nearbyPlayerNames || nearbyPlayerNames.length === 0)) {
-      action = "打坐";
-    }
-    // 交友需通过性格概率检查，否则改为打坐
-    if (action === "交友" && Math.random() > friendProb) {
-      action = "打坐";
-    }
-
+    const slot = getScheduledAction(time);
+    let action: string;
     let icon: string;
     let desc: string;
     let effectText = "";
 
-    switch (action) {
-      case "打坐":
-        icon = "🧘";
-        desc = randItem(ACTION_DESCS.打坐);
-        break;
-      case "抄经":
-        icon = "📖";
-        desc = randItem(ACTION_DESCS.抄经);
-        break;
-      case "散步":
-        icon = "🌿";
-        desc = randItem(ACTION_DESCS.散步);
-        break;
-      case "供奉": {
-        icon = "🕯️";
-        desc = randItem(ACTION_DESCS.供奉);
-        const supplyMerit = 3 + Math.floor(Math.random() * 8);
-        meritDelta += supplyMerit;
-        effectText = `功德 +${supplyMerit}`;
+    if (slot && slot.type === "fixed") {
+      // ── 固定作息活动（吃饭、睡觉、早晚课等） ──
+      action = slot.action;
+      icon = slot.icon;
+      desc = ACTION_DESCS[action] ? randItem(ACTION_DESCS[action]) : "在寺庙中修行。";
+    } else {
+      // ── 自由修行时段：按修行方式权重随机 ──
+      action = pickWeighted(weights);
 
-        // S 级信物掉落检查（每寺庙仅触发一次）
-        if (!newTempleItemIds.includes(templeId) && Math.random() < S_GRADE_DROP_CHANCE) {
-          const item = randItem(S_GRADE_ITEMS);
-          newSGradeItems.push(item);
-          newTempleItemIds.push(templeId);
-          desc += `✦ 供奉感应，获得 S 级信物：${item}！`;
+      // 无真实玩家在场时，交友直接改为打坐（不使用 NPC）
+      if (action === "交友" && (!nearbyPlayerNames || nearbyPlayerNames.length === 0)) {
+        action = "打坐";
+      }
+      // 交友需通过性格概率检查，否则改为打坐
+      if (action === "交友" && Math.random() > friendProb) {
+        action = "打坐";
+      }
+
+      switch (action) {
+        case "打坐":
+          icon = "🧘";
+          desc = randItem(ACTION_DESCS.打坐);
+          break;
+        case "抄经":
+          icon = "📖";
+          desc = randItem(ACTION_DESCS.抄经);
+          break;
+        case "散步":
+          icon = "🌿";
+          desc = randItem(ACTION_DESCS.散步);
+          break;
+        case "供奉": {
+          icon = "🕯️";
+          desc = randItem(ACTION_DESCS.供奉);
+          const supplyMerit = 3 + Math.floor(Math.random() * 8);
+          meritDelta += supplyMerit;
+          effectText = `功德 +${supplyMerit}`;
+
+          // S 级信物掉落检查（每寺庙仅触发一次）
+          if (!newTempleItemIds.includes(templeId) && Math.random() < S_GRADE_DROP_CHANCE) {
+            const item = randItem(S_GRADE_ITEMS);
+            newSGradeItems.push(item);
+            newTempleItemIds.push(templeId);
+            desc += `✦ 供奉感应，获得 S 级信物：${item}！`;
+          }
+          break;
         }
-        break;
+        case "交友": {
+          icon = "🤝";
+          hasFriendEncounter = true;
+          const monkName = randItem(nearbyPlayerNames!);
+          const interaction = randItem(FRIEND_INTERACTIONS);
+          const baseDesc = randItem(ACTION_DESCS.交友);
+          const friendCoins = 1 + Math.floor(Math.random() * 5);
+          const friendMerit = 1 + Math.floor(Math.random() * 3);
+          coinDelta += friendCoins;
+          meritDelta += friendMerit;
+          desc = `${baseDesc} 与道友「${monkName}」${interaction}。`;
+          effectText = `香火钱 +${friendCoins}，功德 +${friendMerit}`;
+          break;
+        }
+        default:
+          icon = "🏯";
+          desc = "在寺庙中修行。";
       }
-      case "交友": {
-        // 此处必有真实玩家在场（无人时已在上方 fallback 为打坐）
-        icon = "🤝";
-        hasFriendEncounter = true;
-        const monkName = randItem(nearbyPlayerNames!);
-        const interaction = randItem(FRIEND_INTERACTIONS);
-        const baseDesc = randItem(ACTION_DESCS.交友);
-        const friendCoins = 1 + Math.floor(Math.random() * 5);
-        const friendMerit = 1 + Math.floor(Math.random() * 3);
-        coinDelta += friendCoins;
-        meritDelta += friendMerit;
-        desc = `${baseDesc} 与道友「${monkName}」${interaction}。`;
-        effectText = `香火钱 +${friendCoins}，功德 +${friendMerit}`;
-        break;
-      }
-      default:
-        icon = "🏯";
-        desc = "在寺庙中修行。";
     }
 
     if (action === prevAction) {
@@ -618,7 +776,7 @@ export function useGameState(userId: string | null = null) {
         incenseCoin: prev.incenseCoin + coins,
         exp: prev.exp + directExp,
         merit: prev.merit + 50,
-        activityLog: [loginEntry, ...prev.activityLog].slice(0, 200),
+        activityLog: [loginEntry, ...prev.activityLog].slice(0, 300),
         nextLogId: logId,
       };
 
@@ -629,9 +787,21 @@ export function useGameState(userId: string | null = null) {
         ns.incenseCoin += bdayCoins;
         ns.merit += bdayMerit;
         const bdayEntry = makeEntry(logId++, "🎂", "今日生辰 · 寺庙贺礼", `生日快乐！香火钱 +${bdayCoins}，功德 +${bdayMerit}`);
-        ns.activityLog = [bdayEntry, ...ns.activityLog].slice(0, 200);
+        ns.activityLog = [bdayEntry, ...ns.activityLog].slice(0, 300);
         ns.nextLogId = logId;
         toast.success("🎂 生辰快乐！", { description: `寺庙赐予生日贺礼：香火钱 +${bdayCoins}，功德 +${bdayMerit}` });
+      }
+
+      // 新的一天：清理超过昨天的旧日志（只保留今天 + 昨天的记录）
+      if (isNewDay) {
+        const yesterdayStr = (() => {
+          const d = new Date();
+          d.setDate(d.getDate() - 1);
+          return d.toISOString().slice(0, 10);
+        })();
+        ns.activityLog = ns.activityLog.filter(
+          (e: ActivityEntry) => !e.date || e.date >= yesterdayStr
+        );
       }
 
       // 每日 AI 修行日志（新的一天，且有玩家档案）
@@ -645,7 +815,7 @@ export function useGameState(userId: string | null = null) {
           ns.nextLogId,
           nearbyNamesRef.current.length > 0 ? nearbyNamesRef.current : undefined,
         );
-        ns.activityLog = [...[...agentResult.entries].reverse(), ...ns.activityLog].slice(0, 200);
+        ns.activityLog = [...[...agentResult.entries].reverse(), ...ns.activityLog].slice(0, 300);
         ns.incenseCoin = Math.max(0, ns.incenseCoin + agentResult.incenseCoinDelta);
         ns.merit += agentResult.meritDelta;
         ns.templeItemsCollected = agentResult.newTempleItemIds;
@@ -679,7 +849,7 @@ export function useGameState(userId: string | null = null) {
           ns.incenseCoin += totalCoins;
           ns.exp += totalExp;
           ns.merit += 100;
-          ns.activityLog = [...taskEntries, ...ns.activityLog].slice(0, 200);
+          ns.activityLog = [...taskEntries, ...ns.activityLog].slice(0, 300);
         }
       }
 
@@ -729,8 +899,8 @@ export function useGameState(userId: string | null = null) {
       let totalExp = taskExp;
       let logId = prev.nextLogId;
 
-      // 主任务日志
-      entries.push(makeEntry(logId++, "🙏", "结缘一位道友", `完成修行任务，经验 +${taskExp}，香火钱 +${taskCoins}`));
+      // 主任务日志（发起申请阶段；结缘成功后由调用方再追加"结缘一位道友"）
+      entries.push(makeEntry(logId++, "🙏", "发起结缘", `AI 分身向道友发起结缘申请，经验 +${taskExp}，香火钱 +${taskCoins}`));
 
       // 特殊事件：信物赠送
       const hasSpecial = Math.random() < SPECIAL_EVENT_CHANCE;
@@ -810,7 +980,7 @@ export function useGameState(userId: string | null = null) {
         merit: prev.merit + Math.max(1, Math.floor(exp / 5)),
         sGradeItems: newSGradeItems,
         templeItemsCollected: newTempleItems,
-        activityLog: [entry, ...prev.activityLog].slice(0, 200),
+        activityLog: [entry, ...prev.activityLog].slice(0, 300),
         nextLogId: logId + 1,
       };
       ns = processLevelUps(ns);
@@ -909,6 +1079,14 @@ export function useGameState(userId: string | null = null) {
     acknowledgeReward,
     setCurrentTempleId: (id: number) => setState(prev => ({ ...prev, currentTempleId: id })),
     setNearbyPlayerNames,
+    pushActivityEntry: (icon: string, action: string, desc: string) => {
+      setState(prev => {
+        const entry = makeEntry(prev.nextLogId, icon, action, desc);
+        const updated = { ...prev, activityLog: [entry, ...prev.activityLog].slice(0, 300), nextLogId: prev.nextLogId + 1 };
+        persistStateNow(updated);
+        return updated;
+      });
+    },
     tapMerit: () => setState(prev => {
       if (prev.merit >= MAX_MERIT) return prev;
       const newMerit = prev.merit + 1;

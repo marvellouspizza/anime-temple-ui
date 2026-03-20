@@ -1,13 +1,15 @@
 /**
- * FriendChatPanel — 好友列表 + 私聊面板
+ * FriendChatPanel — 好友列表 + 结缘申请 + 私聊面板
  *
  * 风格与 SecondMeChat 一致：毛玻璃寺庙面板
- * 两种视图：好友列表 ↔ 聊天对话
+ * 三层视图：Tab 切换（我的道友 / 结缘申请） ↔ 聊天对话
  */
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
+  Clock,
+  Heart,
   MessageCircle,
   Send,
   UserPlus,
@@ -15,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { FriendInfo } from "@/hooks/useFriendChat";
+import type { FriendInfo, SentRequestInfo } from "@/hooks/useFriendChat";
 import type { FriendshipRow, DirectMessage } from "@/lib/supabaseGame";
 
 // ── 类型 ─────────────────────────────────────────────────────
@@ -29,6 +31,7 @@ interface FriendChatPanelProps {
   friends: FriendInfo[];
   pendingRequests: FriendshipRow[];
   pendingProfiles: Record<string, { name: string; avatar: string }>;
+  sentRequests: SentRequestInfo[];
 
   activeChatPeerId: string | null;
   messages: DirectMessage[];
@@ -58,6 +61,7 @@ export function FriendChatPanel({
   friends,
   pendingRequests,
   pendingProfiles,
+  sentRequests,
   activeChatPeerId,
   messages,
   isSending,
@@ -77,6 +81,13 @@ export function FriendChatPanel({
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  // 有新的 pending 请求时自动跳到结缘申请 tab
+  useEffect(() => {
+    if (pendingRequests.length > 0 && tab === "friends" && friends.length === 0) {
+      setTab("requests");
+    }
+  }, [pendingRequests.length, tab, friends.length]);
 
   const handleSend = () => {
     const text = input.trim();
@@ -177,26 +188,15 @@ export function FriendChatPanel({
     );
   }
 
-  // ── 好友列表 / 待处理请求 ──
+  const totalRequestsBadge = pendingRequests.length + sentRequests.length;
+
+  // ── Tab 列表视图 ──
   return (
     <div className="flex flex-col h-full">
       {/* 标题栏 */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--bronze-green)]/30">
         <Users className="h-4 w-4 text-[var(--cinnabar)] shrink-0" />
         <span className="font-title text-lg text-[var(--gold)] flex-1">道友</span>
-        {pendingRequests.length > 0 && (
-          <button
-            className={`relative text-[11px] px-2 py-0.5 rounded-full transition-colors ${
-              tab === "requests"
-                ? "bg-[var(--cinnabar)]/20 text-[var(--cinnabar)]"
-                : "text-foreground/50 hover:text-[var(--cinnabar)]"
-            }`}
-            onClick={() => setTab(tab === "requests" ? "friends" : "requests")}
-          >
-            申请 {pendingRequests.length}
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[var(--cinnabar)] animate-pulse" />
-          </button>
-        )}
         <button
           className="text-foreground/40 hover:text-foreground transition-colors text-xl leading-none"
           onClick={onClose}
@@ -204,45 +204,150 @@ export function FriendChatPanel({
         >×</button>
       </div>
 
+      {/* Tab 切换条 */}
+      <div className="flex border-b border-[var(--bronze-green)]/20">
+        <button
+          className={`flex-1 py-2 text-center text-[12px] font-title transition-colors relative ${
+            tab === "friends"
+              ? "text-[var(--gold)]"
+              : "text-foreground/40 hover:text-foreground/60"
+          }`}
+          onClick={() => setTab("friends")}
+        >
+          <span className="flex items-center justify-center gap-1">
+            <Heart className="h-3 w-3" />
+            我的道友
+            {friends.filter(f => f.unread > 0).length > 0 && (
+              <span className="min-w-[14px] h-[14px] grid place-items-center rounded-full bg-[var(--cinnabar)] text-white text-[8px] font-bold">
+                {friends.filter(f => f.unread > 0).length}
+              </span>
+            )}
+          </span>
+          {tab === "friends" && (
+            <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-[var(--gold)] rounded-full" />
+          )}
+        </button>
+        <button
+          className={`flex-1 py-2 text-center text-[12px] font-title transition-colors relative ${
+            tab === "requests"
+              ? "text-[var(--gold)]"
+              : "text-foreground/40 hover:text-foreground/60"
+          }`}
+          onClick={() => setTab("requests")}
+        >
+          <span className="flex items-center justify-center gap-1">
+            <UserPlus className="h-3 w-3" />
+            结缘申请
+            {totalRequestsBadge > 0 && (
+              <span className="min-w-[14px] h-[14px] grid place-items-center rounded-full bg-[var(--cinnabar)] text-white text-[8px] font-bold">
+                {totalRequestsBadge}
+              </span>
+            )}
+            {pendingRequests.length > 0 && (
+              <span className="absolute top-1 right-2 h-2 w-2 rounded-full bg-[var(--cinnabar)] animate-pulse" />
+            )}
+          </span>
+          {tab === "requests" && (
+            <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-[var(--gold)] rounded-full" />
+          )}
+        </button>
+      </div>
+
       <div className="flex-1 overflow-y-auto px-4 py-3 scrollbar-thin">
-        {tab === "requests" && pendingRequests.length > 0 ? (
-          /* —— 待处理请求 —— */
-          <div className="space-y-2">
-            <div className="text-[10px] text-foreground/40 mb-2">以下道友向你发出了结缘申请</div>
-            {pendingRequests.map(req => {
-              const p = pendingProfiles[req.requester];
-              return (
-                <div key={req.id} className="temple-pill flex items-center gap-3 px-3 py-2.5">
-                  <Avatar className="h-9 w-9 ring-1 ring-[var(--bronze-green)]/40 shrink-0">
-                    {p?.avatar && <AvatarImage src={p.avatar} />}
-                    <AvatarFallback className="bg-black/30 text-[10px]">{(p?.name ?? "僧")[0]}</AvatarFallback>
-                  </Avatar>
-                  <span className="flex-1 font-title text-sm text-foreground/80 truncate">{p?.name ?? "未知"}</span>
-                  <button
-                    className="grid h-7 w-7 place-items-center rounded-full bg-[var(--gold)]/20 text-[var(--gold)] hover:bg-[var(--gold)]/30 transition-colors"
-                    onClick={() => onAccept(req.id)}
-                    title="接受"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    className="grid h-7 w-7 place-items-center rounded-full bg-black/20 text-foreground/40 hover:text-[var(--cinnabar)] transition-colors"
-                    onClick={() => onReject(req.id)}
-                    title="拒绝"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+        {tab === "requests" ? (
+          /* ════════ 结缘申请页面 ════════ */
+          <div className="space-y-4">
+            {/* —— 收到的结缘申请 —— */}
+            {pendingRequests.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <UserPlus className="h-3 w-3 text-[var(--cinnabar)]" />
+                  <span className="text-[10px] font-title text-[var(--cinnabar)]">
+                    收到的结缘申请 ({pendingRequests.length})
+                  </span>
                 </div>
-              );
-            })}
+                <div className="space-y-2">
+                  {pendingRequests.map(req => {
+                    const p = pendingProfiles[req.requester];
+                    return (
+                      <div key={req.id} className="temple-pill flex items-center gap-3 px-3 py-2.5">
+                        <Avatar className="h-9 w-9 ring-1 ring-[var(--bronze-green)]/40 shrink-0">
+                          {p?.avatar && <AvatarImage src={p.avatar} />}
+                          <AvatarFallback className="bg-black/30 text-[10px]">{(p?.name ?? "僧")[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-title text-sm text-foreground/80 truncate block">{p?.name ?? "未知"}</span>
+                          <span className="text-[9px] text-foreground/35">
+                            {new Date(req.created_at).toLocaleDateString("zh-CN")} 发起结缘
+                          </span>
+                        </div>
+                        <button
+                          className="grid h-7 w-7 place-items-center rounded-full bg-[var(--gold)]/20 text-[var(--gold)] hover:bg-[var(--gold)]/30 transition-colors"
+                          onClick={() => onAccept(req.id)}
+                          title="接受"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          className="grid h-7 w-7 place-items-center rounded-full bg-black/20 text-foreground/40 hover:text-[var(--cinnabar)] transition-colors"
+                          onClick={() => onReject(req.id)}
+                          title="拒绝"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* —— 我发出的结缘申请 —— */}
+            {sentRequests.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Clock className="h-3 w-3 text-[var(--bronze-green)]" />
+                  <span className="text-[10px] font-title text-[var(--bronze-green)]">
+                    我发出的结缘申请 ({sentRequests.length})
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {sentRequests.map(sr => (
+                    <div key={sr.friendshipRow.id} className="temple-pill flex items-center gap-3 px-3 py-2.5 opacity-80">
+                      <Avatar className="h-9 w-9 ring-1 ring-[var(--bronze-green)]/40 shrink-0">
+                        {sr.avatar && <AvatarImage src={sr.avatar} />}
+                        <AvatarFallback className="bg-black/30 text-[10px]">{sr.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-title text-sm text-foreground/80 truncate block">{sr.name}</span>
+                        <span className="text-[9px] text-foreground/35">
+                          {new Date(sr.friendshipRow.created_at).toLocaleDateString("zh-CN")} 发出
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-[var(--bronze-green)] px-2 py-0.5 rounded-full bg-[var(--bronze-green)]/10 ring-1 ring-[var(--bronze-green)]/20">
+                        等待回应
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 空状态 */}
+            {pendingRequests.length === 0 && sentRequests.length === 0 && (
+              <div className="flex flex-col items-center gap-2 py-10 text-center">
+                <UserPlus className="h-7 w-7 text-foreground/15" />
+                <span className="text-xs text-foreground/35">暂无结缘申请<br/>在寺中修行时，AI 分身会自动结缘</span>
+              </div>
+            )}
           </div>
         ) : (
-          /* —— 好友列表 —— */
+          /* ════════ 我的道友页面 ════════ */
           <>
             {friends.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center">
-                <UserPlus className="h-7 w-7 text-foreground/15" />
-                <span className="text-xs text-foreground/35">尚无道友<br/>在「附近僧人」中结缘</span>
+                <Heart className="h-7 w-7 text-foreground/15" />
+                <span className="text-xs text-foreground/35">尚无道友<br/>在「附近僧人」中结缘或等待 AI 自动结缘</span>
               </div>
             ) : (
               <div className="space-y-2">

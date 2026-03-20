@@ -362,6 +362,18 @@ export async function fetchPendingRequests(myId: string): Promise<FriendshipRow[
   return data as FriendshipRow[];
 }
 
+/** 获取我发出的待处理结缘申请（我是 requester） */
+export async function fetchSentRequests(myId: string): Promise<FriendshipRow[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("friendships")
+    .select("id, requester, addressee, status, created_at")
+    .eq("requester", myId)
+    .eq("status", "pending");
+  if (error || !data) return [];
+  return data as FriendshipRow[];
+}
+
 /** 查询两人之间的好友状态 */
 export async function getFriendshipBetween(
   myId: string,
