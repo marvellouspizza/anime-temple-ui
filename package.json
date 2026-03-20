@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -69,6 +70,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@vercel/node": "^5.6.18",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/ui": "^4.0.18",
     "eslint": "^9.39.1",
