@@ -344,13 +344,14 @@ export function FriendChatPanel({
         ) : (
           /* ════════ 我的道友页面 ════════ */
           <>
-            {friends.length === 0 ? (
+            {friends.length === 0 && sentRequests.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center">
                 <Heart className="h-7 w-7 text-foreground/15" />
                 <span className="text-xs text-foreground/35">尚无道友<br/>在「附近僧人」中结缘或等待 AI 自动结缘</span>
               </div>
             ) : (
               <div className="space-y-2">
+                {/* 已结为道友 */}
                 {friends.map(f => (
                   <button
                     key={f.odataId}
@@ -374,6 +375,25 @@ export function FriendChatPanel({
                     )}
                     <MessageCircle className="h-4 w-4 text-foreground/20 group-hover:text-[var(--gold)] transition-colors shrink-0" />
                   </button>
+                ))}
+                {/* 我发出的结缘申请（等待对方回应） */}
+                {sentRequests.map(sr => (
+                  <div
+                    key={sr.friendshipRow.id}
+                    className="temple-pill flex items-center gap-3 px-3 py-2.5 opacity-70"
+                  >
+                    <Avatar className="h-10 w-10 ring-1 ring-[var(--bronze-green)]/30 shrink-0">
+                      {sr.avatar && <AvatarImage src={sr.avatar} />}
+                      <AvatarFallback className="bg-black/30 text-[10px] font-title">{sr.name[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-title text-sm text-foreground/70 truncate block">{sr.name}</span>
+                      <span className="text-[9px] text-foreground/35">已发出结缘申请</span>
+                    </div>
+                    <span className="text-[10px] text-[var(--bronze-green)] px-2 py-0.5 rounded-full bg-[var(--bronze-green)]/10 ring-1 ring-[var(--bronze-green)]/20 shrink-0">
+                      等待回应
+                    </span>
+                  </div>
                 ))}
               </div>
             )}
