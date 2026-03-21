@@ -353,6 +353,24 @@ export async function removeFriend(peerId: string): Promise<void> {
   if (error) console.error("[Friends] unfriend:", error.message);
 }
 
+/** 获取指定玩家的公开档案（含等级、功德，需 Supabase 执行 supabase_migration_peer_profile.sql）*/
+export interface PeerProfile {
+  name: string;
+  avatar_url: string;
+  gender: string;
+  personality: string;
+  training_style: string;
+  birthday: string;
+  level: number;
+  merit: number;
+}
+export async function fetchPeerProfile(peerId: string): Promise<PeerProfile | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("get_peer_profile", { p_peer: peerId });
+  if (error) { console.error("[Friends] get_peer_profile:", error.message); return null; }
+  return data as PeerProfile | null;
+}
+
 /** 根据 user ids 批量获取玩家名字和头像 */
 export async function fetchPlayersByIds(
   ids: string[]

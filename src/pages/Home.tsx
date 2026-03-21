@@ -286,12 +286,17 @@ export default function Home({ targetSection }: HomeProps) {
       autoEncounterFiredRef.current = true;
       doMorningTask();
 
-      // 随机选 1~3 位（不超过在场人数）发起结缘
+      // 随机选 1~3 位（排除已是好友或已发过申请的人）发起结缘
+      const alreadyRelatedIds = new Set([
+        ...friendChat.friends.map(f => f.odataPeerId),
+        ...friendChat.sentRequests.map(s => s.peerId),
+      ]);
+      const candidates = nearbyMonks.filter(m => !alreadyRelatedIds.has(m.id));
       const count = Math.min(
         Math.floor(Math.random() * 3) + 1,
-        nearbyMonks.length
+        candidates.length
       );
-      const shuffled = [...nearbyMonks].sort(() => Math.random() - 0.5);
+      const shuffled = [...candidates].sort(() => Math.random() - 0.5);
       const targets = shuffled.slice(0, count);
 
       for (const target of targets) {

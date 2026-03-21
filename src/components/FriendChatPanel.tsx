@@ -17,9 +17,25 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { Sparkles, BookOpen } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { FriendInfo, SentRequestInfo } from "@/hooks/useFriendChat";
-import { fetchPlayerProfile, type FriendshipRow, type DirectMessage, type PlayerProfileLike } from "@/lib/supabaseGame";
+import { fetchPeerProfile, type PeerProfile, type FriendshipRow, type DirectMessage } from "@/lib/supabaseGame";
+
+// ── 工具函数 ─────────────────────────────────────────────────
+function levelTitle(level: number): string {
+  if (level <= 0)  return "初来乍到";
+  if (level <= 3)  return "云游小僧";
+  if (level <= 6)  return "苦修居士";
+  if (level <= 9)  return "参禅行者";
+  if (level <= 12) return "悟道禅师";
+  return "登峰造极";
+}
+function formatMerit(v: number): string {
+  if (v < 10000) return v.toLocaleString("zh-CN");
+  const wan = v / 10000;
+  return `${wan.toFixed(1).replace(/\.0$/, "")}万`;
+}
 
 // ── 类型 ─────────────────────────────────────────────────────
 
@@ -81,14 +97,14 @@ export function FriendChatPanel({
 
   // 查看资料
   const [viewingFriend, setViewingFriend] = useState<FriendInfo | null>(null);
-  const [peerProfile, setPeerProfile] = useState<PlayerProfileLike | null>(null);
+  const [peerProfile, setPeerProfile] = useState<PeerProfile | null>(null);
   const [peerProfileLoading, setPeerProfileLoading] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   useEffect(() => {
     if (!viewingFriend) { setPeerProfile(null); setConfirmRemove(false); return; }
     setPeerProfileLoading(true);
-    fetchPlayerProfile(viewingFriend.odataPeerId).then(p => {
+    fetchPeerProfile(viewingFriend.odataPeerId).then(p => {
       setPeerProfile(p);
       setPeerProfileLoading(false);
     });
@@ -119,9 +135,9 @@ export function FriendChatPanel({
 
   // ── 资料视图 ──
   if (viewingFriend) {
-    const birthdayDisplay = peerProfile?.birthday
-      ? new Date(peerProfile.birthday).toLocaleDateString("zh-CN", { month: "long", day: "numeric" })
-      : null;
+    const lv    = peerProfile?.level ?? 0;
+    const merit = peerProfile?.merit ?? 0;
+    const title = levelTitle(lv);
     return (
       <div className="flex flex-col h-full">
         {/* 标题栏 */}
@@ -133,7 +149,10 @@ export function FriendChatPanel({
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <span className="font-title text-base text-[var(--gold)] flex-1">道友资料</span>
+          <Users className="h-4 w-4 text-[var(--cinnabar)] shrink-0" />
+          <span className="font-title text-base text-[var(--gold)] flex-1">
+            {viewingFriend.name} · 修行日志
+          </span>
           <button
             className="text-foreground/40 hover:text-foreground transition-colors text-xl leading-none"
             onClick={onClose}
@@ -142,72 +161,86 @@ export function FriendChatPanel({
         </div>
 
         {/* 资料内容 */}
-        <div className="flex-1 overflow-y-auto px-5 py-6 flex flex-col items-center gap-4">
-          {/* 头像 */}
-          <Avatar className="h-24 w-24 ring-2 ring-[var(--gold)]/50 shadow-lg">
-            {viewingFriend.avatar && <AvatarImage src={viewingFriend.avatar} alt={viewingFriend.name} />}
-            <AvatarFallback className="bg-black/30 text-3xl font-title">{viewingFriend.name[0]}</AvatarFallback>
-          </Avatar>
-
-          {/* 名字 */}
-          <h2 className="font-title text-xl text-[var(--gold)]">{viewingFriend.name}</h2>
-
-          {peerProfileLoading ? (
-            <div className="text-xs text-foreground/30 mt-2">加载中…</div>
-          ) : peerProfile ? (
-            <div className="w-full space-y-2 mt-1">
-              {peerProfile.trainingStyle && (
-                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
-                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">修行方式</span>
-                  <span className="text-[12px] text-foreground/80 font-title">{peerProfile.trainingStyle}</span>
+        <div className="flex-1 overflow-y-auto">
+          {/* 档案头 */}
+          <div className="flex items-center gap-4 px-6 pt-5 pb-4">
+            <Avatar className="h-16 w-16 ring-2 ring-[var(--gold)]/60 shrink-0">
+              {viewingFriend.avatar && <AvatarImage src={viewingFriend.avatar} alt={viewingFriend.name} />}
+              <AvatarFallback className="bg-black/30 text-lg font-title">{viewingFriend.name[0]}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2">
+                <span className="font-title text-2xl text-[var(--cinnabar)]">{viewingFriend.name}</span>
+                {!peerProfileLoading && lv > 0 && (
+                  <span className="text-xs text-foreground/55">Lv.{lv} · {title}</span>
+                )}
+              </div>
+              {peerProfile?.training_style && (
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--bronze-green)]/20 text-[var(--bronze-green)] ring-1 ring-[var(--bronze-green)]/30">
+                    {peerProfile.training_style}
+                  </span>
                 </div>
               )}
-              {peerProfile.personality && (
-                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
-                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">性　格</span>
-                  <span className="text-[12px] text-foreground/80 font-title">{peerProfile.personality}</span>
+              {!peerProfileLoading && merit > 0 && (
+                <div className="mt-1.5 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-[var(--gold)]" />
+                  <span className="text-[11px] text-foreground/55">功德 {formatMerit(merit)}</span>
                 </div>
               )}
-              {peerProfile.gender && (
-                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
-                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">性　别</span>
-                  <span className="text-[12px] text-foreground/80 font-title">{peerProfile.gender}</span>
-                </div>
-              )}
-              {birthdayDisplay && (
-                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
-                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">生　辰</span>
-                  <span className="text-[12px] text-foreground/80 font-title">{birthdayDisplay}</span>
-                </div>
+              {peerProfileLoading && (
+                <div className="mt-2 text-[11px] text-foreground/30">加载中…</div>
               )}
             </div>
-          ) : (
-            <div className="text-xs text-foreground/30 mt-2">暂无详细资料</div>
+          </div>
+
+          <div className="mx-6 h-px bg-[var(--bronze-green)]/20" />
+
+          {/* 修行信息 */}
+          {peerProfile && (
+            <div className="px-6 pt-4 pb-2">
+              <div className="flex items-center gap-2 mb-4">
+                <BookOpen className="h-3.5 w-3.5 text-[var(--gold)]" />
+                <span className="font-title text-sm text-[var(--gold)]">修行信息</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="temple-pill flex flex-col items-center gap-0.5 py-2.5">
+                  <span className="text-[10px] text-foreground/50">性格</span>
+                  <span className="font-title text-sm text-[var(--gold)]">{peerProfile.personality || "未知"}</span>
+                </div>
+                <div className="temple-pill flex flex-col items-center gap-0.5 py-2.5">
+                  <span className="text-[10px] text-foreground/50">修行方式</span>
+                  <span className="font-title text-sm text-[var(--gold)]">{peerProfile.training_style || "未知"}</span>
+                </div>
+              </div>
+            </div>
           )}
+        </div>
 
-          {/* 操作按钮区 */}
-          <div className="mt-auto w-full space-y-2">
-            <button
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--gold)]/15 text-[var(--gold)] font-title hover:bg-[var(--gold)]/25 active:scale-95 transition-all ring-1 ring-[var(--gold)]/30"
-              onClick={() => { setViewingFriend(null); onOpenChat(viewingFriend.odataPeerId); }}
-            >
-              <MessageCircle className="h-4 w-4" />
-              发消息
-            </button>
+        {/* 操作按钮区 */}
+        <div className="mx-6 h-px bg-[var(--bronze-green)]/20" />
+        <div className="flex gap-2 justify-end px-6 py-4">
+          <button
+            className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
+            onClick={() => { setViewingFriend(null); onOpenChat(viewingFriend.odataPeerId); }}
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            发消息
+          </button>
 
-            {/* 删除好友 — 二次确认 */}
-            {!confirmRemove ? (
+          {/* 解除结缘 — 二次确认 */}
+          {!confirmRemove ? (
               <button
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-foreground/30 hover:text-[var(--cinnabar)] hover:bg-[var(--cinnabar)]/8 font-title text-sm transition-all"
+                className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm opacity-70 hover:opacity-100"
                 onClick={() => setConfirmRemove(true)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 解除结缘
               </button>
             ) : (
-              <div className="flex gap-2">
+              <>
                 <button
-                  className="flex-1 py-2 rounded-xl bg-[var(--cinnabar)]/15 text-[var(--cinnabar)] font-title text-sm hover:bg-[var(--cinnabar)]/25 active:scale-95 transition-all ring-1 ring-[var(--cinnabar)]/30"
+                  className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm bg-[var(--cinnabar)]/20 text-[var(--cinnabar)] border-[var(--cinnabar)]/40"
                   onClick={() => {
                     onRemove(viewingFriend.odataPeerId, viewingFriend.name);
                     setViewingFriend(null);
@@ -216,14 +249,13 @@ export function FriendChatPanel({
                   确认解除
                 </button>
                 <button
-                  className="flex-1 py-2 rounded-xl bg-black/15 text-foreground/40 font-title text-sm hover:bg-black/25 transition-all"
+                  className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
                   onClick={() => setConfirmRemove(false)}
                 >
                   取消
                 </button>
-              </div>
+              </>
             )}
-          </div>
         </div>
       </div>
     );
