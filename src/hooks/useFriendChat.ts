@@ -169,6 +169,10 @@ export function useFriendChat(myUserId: string | null) {
     setIsSending(false);
   }, [myUserId, activeChatPeerId, isSending]);
 
+  // ── 红点状态：只在本次会话的 Realtime 事件中触发，刷新不误报 ──
+  const [hasNewActivity, setHasNewActivity] = useState(false);
+  const clearNewActivity = useCallback(() => setHasNewActivity(false), []);
+
   // ── Realtime 监听 friendships INSERT/UPDATE（实时收到结缘申请）──
   useEffect(() => {
     if (!supabase || !myUserId) return;
@@ -183,7 +187,11 @@ export function useFriendChat(myUserId: string | null) {
           table: "friendships",
           filter: `addressee=eq.${myUserId}`,
         },
-        () => { refreshFriends(); }
+        () => {
+          // 收到新的结缘申请 → 亮红点
+          setHasNewActivity(true);
+          refreshFriends();
+        }
       )
       .on(
         "postgres_changes",
@@ -203,7 +211,11 @@ export function useFriendChat(myUserId: string | null) {
           table: "friendships",
           filter: `requester=eq.${myUserId}`,
         },
-        () => { refreshFriends(); }
+        () => {
+          // 对方接受了我的申请 → 亮红点
+          setHasNewActivity(true);
+          refreshFriends();
+        }
       )
       .subscribe();
 
@@ -232,7 +244,8 @@ export function useFriendChat(myUserId: string | null) {
           if (newMsg.sender_id === activeChatPeerId) {
             setMessages(prev => [...prev, newMsg]);
           } else {
-            // 不在聊天 → 增加未读计数
+            // 不在聊天 → 增加未读计数 + 亮红点
+            setHasNewActivity(true);
             setFriends(prev =>
               prev.map(f =>
                 f.odataPeerId === newMsg.sender_id
@@ -269,5 +282,7 @@ export function useFriendChat(myUserId: string | null) {
     messages,
     send,
     isSending,
+    hasNewActivity,
+    clearNewActivity,
   };
 }

@@ -248,24 +248,10 @@ export default function Home({ targetSection }: HomeProps) {
   const [pendingProfiles, setPendingProfiles] = useState<Record<string, { name: string; avatar: string }>>({});
   const prevPendingIdsRef = useRef<Set<number>>(new Set());
 
-  // 道友红点：有未读道友消息/申请时亮起，点击"我的道友"后熄灭
-  const [hasUnseenFriendActivity, setHasUnseenFriendActivity] = useState(false);
-  const friendsCountRef = useRef<number | null>(null);
-  // 有新的待处理申请或未读消息时亮起红点
-  useEffect(() => {
-    if (friendChat.pendingRequests.length > 0 || friendChat.friends.some(f => f.unread > 0)) {
-      setHasUnseenFriendActivity(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [friendChat.pendingRequests.length, friendChat.friends]);
-  // 好友数量增加（对方接受了结缘申请）时亮起红点
-  useEffect(() => {
-    const count = friendChat.friends.length;
-    if (friendsCountRef.current !== null && count > friendsCountRef.current) {
-      setHasUnseenFriendActivity(true);
-    }
-    friendsCountRef.current = count;
-  }, [friendChat.friends.length]);
+  // 道友红点：直接使用 hook 提供的 Realtime 事件驱动标志（刷新不误报）
+  const hasUnseenFriendActivity = friendChat.hasNewActivity;
+  const markFriendActivitySeen  = friendChat.clearNewActivity;
+
   useEffect(() => {
     const ids = friendChat.pendingRequests.map(r => r.requester);
     if (ids.length === 0) { setPendingProfiles({}); return; }
@@ -295,52 +281,67 @@ export default function Home({ targetSection }: HomeProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // AI 自动结缘：当检测到附近有其他玩家时，随机选择 1~3 人发起结缘
-  const autoEncounterFiredRef = useRef(false);
+  // AI 自动结缘：每位新到场的僧人独立决策，逐一处理而不是一次性触发
+  // - 两人在场（nearbyMonks.length === 1）：90% 概率向对方发起结缘
+  // - 三人及以上在场：从本批新到的候选人中随机挑 1 人发起
+  const morningTaskFiredRef = useRef(false);
+  const processedMonkIdsRef = useRef(new Set<string>());
   useEffect(() => {
-    if (
-      nearbyMonks.length > 0 &&
-      !state.dailyTaskDone &&
-      state.dailyLoginDone &&
-      !autoEncounterFiredRef.current
-    ) {
-      autoEncounterFiredRef.current = true;
-      doMorningTask();
-
-      // 随机选 1~3 位（排除已是好友或已发过申请的人）发起结缘
-      const alreadyRelatedIds = new Set([
-        ...friendChat.friends.map(f => f.odataPeerId),
-        ...friendChat.sentRequests.map(s => s.peerId),
-      ]);
-      const candidates = nearbyMonks.filter(m => !alreadyRelatedIds.has(m.id));
-      const count = Math.min(
-        Math.floor(Math.random() * 3) + 1,
-        candidates.length
-      );
-      const shuffled = [...candidates].sort(() => Math.random() - 0.5);
-      const targets = shuffled.slice(0, count);
-
-      for (const target of targets) {
-        friendChat.requestFriend(target.id).then(result => {
-          if (result.ok) {
-            const isMutual = result.msg.includes("自动结为道友");
-            if (isMutual) {
-              // 双方互发申请，直接成为好友
-              pushActivityEntry("🤝", "结缘一位道友", `与「${target.name}」双方互发结缘，已喜结道友`);
-              toast.success(`与「${target.name}」喜结道友！`, { description: result.msg });
-            } else {
-              // 单方发起（doMorningTask 已写"发起结缘"日志）
-              toast.success(`AI 分身向「${target.name}」发起结缘`, { description: result.msg });
-            }
-          }
-          // 已是好友 / 已申请过 → 静默忽略
-        });
-      }
-    }
-    // 新的一天重置标记
+    // 新的一天：重置所有状态
     if (!state.dailyLoginDone) {
-      autoEncounterFiredRef.current = false;
+      morningTaskFiredRef.current = false;
+      processedMonkIdsRef.current = new Set();
+      return;
     }
+
+    if (nearbyMonks.length === 0) return;
+
+    // 晨间任务只触发一次（当日第一次有人进来时，且今日未完成）
+    if (!morningTaskFiredRef.current && !state.dailyTaskDone) {
+      morningTaskFiredRef.current = true;
+      doMorningTask();
+    }
+
+    // 过滤：已是好友 / 已发过申请 / 本日已处理过的 monk
+    const alreadyRelatedIds = new Set([
+      ...friendChat.friends.map(f => f.odataPeerId),
+      ...friendChat.sentRequests.map(s => s.peerId),
+    ]);
+    const newCandidates = nearbyMonks.filter(
+      m => !alreadyRelatedIds.has(m.id) && !processedMonkIdsRef.current.has(m.id)
+    );
+
+    if (newCandidates.length === 0) return;
+
+    // 决定向哪位发起结缘
+    let target: (typeof newCandidates)[0] | undefined;
+    if (nearbyMonks.length === 1) {
+      // 寺庙共 2 人 → 90% 概率发起
+      if (Math.random() < 0.9) target = newCandidates[0];
+    } else {
+      // 3+ 人在场 → 从本批新到的候选人中随机挑 1 人
+      const shuffled = [...newCandidates].sort(() => Math.random() - 0.5);
+      target = shuffled[0];
+    }
+
+    // 无论是否发起，都标记已处理（防止同一 monk 重复触发）
+    for (const m of newCandidates) processedMonkIdsRef.current.add(m.id);
+
+    if (!target) return;
+
+    const chosenTarget = target;
+    friendChat.requestFriend(chosenTarget.id).then(result => {
+      if (result.ok) {
+        const isMutual = result.msg.includes("自动结为道友");
+        if (isMutual) {
+          pushActivityEntry("🤝", "结缘一位道友", `与「${chosenTarget.name}」双方互发结缘，已喜结道友`);
+          toast.success(`与「${chosenTarget.name}」喜结道友！`, { description: result.msg });
+        } else {
+          toast.success(`AI 分身向「${chosenTarget.name}」发起结缘`, { description: result.msg });
+        }
+      }
+      // 已是好友 / 已申请过 → 静默忽略
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearbyMonks, state.dailyTaskDone, state.dailyLoginDone, doMorningTask]);
 
@@ -695,7 +696,7 @@ export default function Home({ targetSection }: HomeProps) {
             </button>
             <button
               className="temple-icon-btn h-8 w-8 relative"
-              onClick={() => { setShowFriendPanel(true); setHasUnseenFriendActivity(false); }}
+              onClick={() => { setShowFriendPanel(true); markFriendActivitySeen(); }}
               aria-label="道友"
               title="道友列表"
             >
@@ -800,7 +801,7 @@ export default function Home({ targetSection }: HomeProps) {
               {([
                 { label: "寺庙概览", icon: <Landmark     className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
                 { label: "其他僧人", icon: <Users        className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
-                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => { setShowFriendPanel(true); setHasUnseenFriendActivity(false); }, dot: hasUnseenFriendActivity },
+                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => { setShowFriendPanel(true); markFriendActivitySeen(); }, dot: hasUnseenFriendActivity },
                 { label: "今日修行", icon: <CalendarCheck className="h-5 w-5" />, onClick: () => setShowDailyPanel(true) },
                 { label: "成就",     icon: <Trophy       className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
               ] as { label: string; icon: React.ReactNode; onClick: () => void; badge?: number; dot?: boolean }[]).map(({ label, icon, onClick, badge, dot }) => (
@@ -1454,7 +1455,7 @@ export default function Home({ targetSection }: HomeProps) {
                                 friendChat.acceptRequest(theyReqMe.id);
                                 pushActivityEntry("🤝", "结缘一位道友", `接受「${peerName}」的结缘申请，已互为道友`);
                                 toast.success(`与「${peerName}」喜结道友！`);
-                                setHasUnseenFriendActivity(false);
+                                markFriendActivitySeen();
                                 setSelectedMonkId(null);
                                 setShowMonksPanel(false);
                                 setShowFriendPanel(true);

@@ -352,7 +352,6 @@ export function FriendChatPanel({
     );
   }
 
-  const totalRequestsBadge = pendingRequests.length + sentRequests.length;
 
   // ── Tab 列表视图 ──
   return (
@@ -381,12 +380,10 @@ export function FriendChatPanel({
           <span className="flex items-center justify-center gap-1">
             <Heart className="h-3 w-3" />
             我的道友
-            {friends.filter(f => f.unread > 0).length > 0 && (
-              <span className="min-w-[14px] h-[14px] grid place-items-center rounded-full bg-[var(--cinnabar)] text-white text-[8px] font-bold">
-                {friends.filter(f => f.unread > 0).length}
-              </span>
-            )}
           </span>
+          {friends.some(f => f.unread > 0) && (
+            <span className="absolute top-1.5 right-[calc(25%-4px)] h-2 w-2 rounded-full bg-[var(--cinnabar)] animate-pulse" />
+          )}
           {tab === "friends" && (
             <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-[var(--gold)] rounded-full" />
           )}
@@ -402,15 +399,10 @@ export function FriendChatPanel({
           <span className="flex items-center justify-center gap-1">
             <UserPlus className="h-3 w-3" />
             结缘申请
-            {totalRequestsBadge > 0 && (
-              <span className="min-w-[14px] h-[14px] grid place-items-center rounded-full bg-[var(--cinnabar)] text-white text-[8px] font-bold">
-                {totalRequestsBadge}
-              </span>
-            )}
-            {pendingRequests.length > 0 && (
-              <span className="absolute top-1 right-2 h-2 w-2 rounded-full bg-[var(--cinnabar)] animate-pulse" />
-            )}
           </span>
+          {pendingRequests.length > 0 && (
+            <span className="absolute top-1.5 right-[calc(25%-4px)] h-2 w-2 rounded-full bg-[var(--cinnabar)] animate-pulse" />
+          )}
           {tab === "requests" && (
             <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-[var(--gold)] rounded-full" />
           )}
