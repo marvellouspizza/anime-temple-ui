@@ -774,7 +774,7 @@ export default function Home({ targetSection }: HomeProps) {
               {([
                 { label: "寺庙概览", icon: <Landmark     className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
                 { label: "其他僧人", icon: <Users        className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
-                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.sentRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
+                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
                 { label: "今日修行", icon: <CalendarCheck className="h-5 w-5" />, onClick: () => setShowDailyPanel(true) },
                 { label: "成就",     icon: <Trophy       className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
               ] as { label: string; icon: React.ReactNode; onClick: () => void; badge?: number }[]).map(({ label, icon, onClick, badge }) => (
@@ -1398,6 +1398,25 @@ export default function Home({ targetSection }: HomeProps) {
                         className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
                         onClick={async () => {
                           if (!supabaseUserId || !monk) return;
+                          // 先检查对方是否已向我发起申请
+                          const existing = await friendChat.checkFriendship(monk.id);
+                          if (existing && existing.status === 'pending' && existing.requester === monk.id) {
+                            // 对方已发申请 → 直接接受
+                            toast('对方已向你发起结缘申请', {
+                              description: `「${monk.name}」希望与你结为道友，是否同意？`,
+                              action: {
+                                label: '同意结缘',
+                                onClick: async () => {
+                                  await friendChat.acceptRequest(existing.id);
+                                  toast.success(`已与「${monk.name}」喜结道友！`);
+                                  setShowFriendPanel(true);
+                                },
+                              },
+                              cancel: { label: '暂不', onClick: () => {} },
+                              duration: 10000,
+                            });
+                            return;
+                          }
                           const result = await friendChat.requestFriend(monk.id);
                           toast[result.ok ? 'success' : 'info'](result.msg);
                         }}

@@ -299,31 +299,10 @@ export async function sendFriendRequest(
 ): Promise<{ ok: boolean; msg: string }> {
   if (!supabase) return { ok: false, msg: "云同步未启用" };
 
-  // 先查是否已有记录
-  const { data: exist } = await supabase
-    .from("friendships")
-    .select("id, status, requester")
-    .or(`and(requester.eq.${myId},addressee.eq.${peerId}),and(requester.eq.${peerId},addressee.eq.${myId})`)
-    .maybeSingle();
-
-  if (exist) {
-    if (exist.status === "accepted") return { ok: false, msg: "你们已是道友" };
-    if (exist.status === "pending" && exist.requester === myId) return { ok: false, msg: "已发送过申请，请等待对方回应" };
-    if (exist.status === "pending" && exist.requester === peerId) {
-      // 对方先申请了我 → 直接互相成为好友
-      await supabase.from("friendships").update({ status: "accepted", updated_at: new Date().toISOString() }).eq("id", exist.id);
-      return { ok: true, msg: "对方也向你发出了申请，已自动结为道友！" };
-    }
-    // rejected → 允许重新发起
-    if (exist.status === "rejected") {
-      await supabase.from("friendships").update({ status: "pending", requester: myId, addressee: peerId, updated_at: new Date().toISOString() }).eq("id", exist.id);
-      return { ok: true, msg: "已重新发出结缘申请" };
-    }
-  }
-
-  const { error } = await supabase.from("friendships").insert({ requester: myId, addressee: peerId });
+  // 通过 SECURITY DEFINER 函数发送申请，绕过角色权限限制
+  const { data, error } = await supabase.rpc("send_friend_request", { p_addressee: peerId });
   if (error) return { ok: false, msg: error.message };
-  return { ok: true, msg: "结缘申请已送出，等待对方回应" };
+  return data as { ok: boolean; msg: string };
 }
 
 /** 接受好友申请 */

@@ -163,6 +163,49 @@ export function useFriendChat(myUserId: string | null) {
     setIsSending(false);
   }, [myUserId, activeChatPeerId, isSending]);
 
+  // ── Realtime 监听 friendships INSERT/UPDATE（实时收到结缘申请）──
+  useEffect(() => {
+    if (!supabase || !myUserId) return;
+
+    const friendshipChannel = supabase
+      .channel("friendships-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "friendships",
+          filter: `addressee=eq.${myUserId}`,
+        },
+        () => { refreshFriends(); }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "friendships",
+          filter: `addressee=eq.${myUserId}`,
+        },
+        () => { refreshFriends(); }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "friendships",
+          filter: `requester=eq.${myUserId}`,
+        },
+        () => { refreshFriends(); }
+      )
+      .subscribe();
+
+    return () => {
+      supabase!.removeChannel(friendshipChannel);
+    };
+  }, [myUserId, refreshFriends]);
+
   // ── Realtime 监听 direct_messages INSERT ──
   useEffect(() => {
     if (!supabase || !myUserId) return;
