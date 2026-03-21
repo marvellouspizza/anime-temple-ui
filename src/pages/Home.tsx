@@ -774,7 +774,7 @@ export default function Home({ targetSection }: HomeProps) {
               {([
                 { label: "寺庙概览", icon: <Landmark     className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
                 { label: "其他僧人", icon: <Users        className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
-                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.sentRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
+                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
                 { label: "今日修行", icon: <CalendarCheck className="h-5 w-5" />, onClick: () => setShowDailyPanel(true) },
                 { label: "成就",     icon: <Trophy       className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
               ] as { label: string; icon: React.ReactNode; onClick: () => void; badge?: number }[]).map(({ label, icon, onClick, badge }) => (
