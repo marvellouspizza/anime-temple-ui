@@ -10,9 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  fetchFriends,
-  fetchPendingRequests,
-  fetchSentRequests,
+  getFriendData,
   sendFriendRequest,
   acceptFriendRequest,
   rejectFriendRequest,
@@ -63,11 +61,7 @@ export function useFriendChat(myUserId: string | null) {
   // ── 刷新好友列表 + 结缘申请 ──
   const refreshFriends = useCallback(async () => {
     if (!myUserId) return;
-    const [rows, pending, sent] = await Promise.all([
-      fetchFriends(myUserId),
-      fetchPendingRequests(myUserId),
-      fetchSentRequests(myUserId),
-    ]);
+    const { friends: rows, pending, sent } = await getFriendData();
     setPendingRequests(pending);
 
     // 拿好友的 peerId

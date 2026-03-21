@@ -308,49 +308,26 @@ export async function sendFriendRequest(
 /** 接受好友申请 */
 export async function acceptFriendRequest(friendshipId: number): Promise<void> {
   if (!supabase) return;
-  await supabase.from("friendships").update({ status: "accepted", updated_at: new Date().toISOString() }).eq("id", friendshipId);
+  await supabase.rpc("respond_friend_request", { p_friendship_id: friendshipId, p_accept: true });
 }
 
 /** 拒绝好友申请 */
 export async function rejectFriendRequest(friendshipId: number): Promise<void> {
   if (!supabase) return;
-  await supabase.from("friendships").update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", friendshipId);
+  await supabase.rpc("respond_friend_request", { p_friendship_id: friendshipId, p_accept: false });
 }
 
-/** 获取我的好友列表（已接受） */
-export async function fetchFriends(myId: string): Promise<FriendshipRow[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("friendships")
-    .select("id, requester, addressee, status, created_at")
-    .or(`requester.eq.${myId},addressee.eq.${myId}`)
-    .eq("status", "accepted");
-  if (error || !data) return [];
-  return data as FriendshipRow[];
-}
-
-/** 获取待处理的好友申请（我是 addressee） */
-export async function fetchPendingRequests(myId: string): Promise<FriendshipRow[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("friendships")
-    .select("id, requester, addressee, status, created_at")
-    .eq("addressee", myId)
-    .eq("status", "pending");
-  if (error || !data) return [];
-  return data as FriendshipRow[];
-}
-
-/** 获取我发出的待处理结缘申请（我是 requester） */
-export async function fetchSentRequests(myId: string): Promise<FriendshipRow[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("friendships")
-    .select("id, requester, addressee, status, created_at")
-    .eq("requester", myId)
-    .eq("status", "pending");
-  if (error || !data) return [];
-  return data as FriendshipRow[];
+/** 获取当前用户所有好友数据（SECURITY DEFINER，绕过表级权限） */
+export async function getFriendData(): Promise<{
+  friends: FriendshipRow[];
+  pending: FriendshipRow[];
+  sent: FriendshipRow[];
+}> {
+  if (!supabase) return { friends: [], pending: [], sent: [] };
+  const { data, error } = await supabase.rpc("get_friend_data");
+  if (error || !data) { console.error("[Friends] get_friend_data:", error?.message); return { friends: [], pending: [], sent: [] }; }
+  const d = data as { friends: FriendshipRow[]; pending: FriendshipRow[]; sent: FriendshipRow[] };
+  return { friends: d.friends ?? [], pending: d.pending ?? [], sent: d.sent ?? [] };
 }
 
 /** 查询两人之间的好友状态 */
@@ -359,13 +336,15 @@ export async function getFriendshipBetween(
   peerId: string
 ): Promise<FriendshipRow | null> {
   if (!supabase) return null;
-  const { data } = await supabase
-    .from("friendships")
-    .select("id, requester, addressee, status, created_at")
-    .or(`and(requester.eq.${myId},addressee.eq.${peerId}),and(requester.eq.${peerId},addressee.eq.${myId})`)
-    .maybeSingle();
-  return (data as FriendshipRow) ?? null;
+  const { data, error } = await supabase.rpc("get_friendship_with", { p_peer: peerId });
+  if (error || !data) return null;
+  return data as FriendshipRow;
 }
+
+// 保留旧函数供向后兼容
+export async function fetchFriends(myId: string): Promise<FriendshipRow[]> { return (await getFriendData()).friends; }
+export async function fetchPendingRequests(myId: string): Promise<FriendshipRow[]> { return (await getFriendData()).pending; }
+export async function fetchSentRequests(myId: string): Promise<FriendshipRow[]> { return (await getFriendData()).sent; }
 
 /** 根据 user ids 批量获取玩家名字和头像 */
 export async function fetchPlayersByIds(
@@ -406,11 +385,7 @@ export async function sendDirectMessage(
   if (!supabase) return null;
   const trimmed = content.trim();
   if (!trimmed) return null;
-  const { data, error } = await supabase
-    .from("direct_messages")
-    .insert({ sender_id: senderId, receiver_id: receiverId, content: trimmed })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("send_dm_message", { p_receiver: receiverId, p_content: trimmed });
   if (error) { console.error("[DM] send error:", error.message); return null; }
   return data as DirectMessage;
 }
@@ -422,12 +397,7 @@ export async function fetchDirectMessages(
   limit = 50
 ): Promise<DirectMessage[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("direct_messages")
-    .select("*")
-    .or(`and(sender_id.eq.${myId},receiver_id.eq.${peerId}),and(sender_id.eq.${peerId},receiver_id.eq.${myId})`)
-    .order("created_at", { ascending: true })
-    .limit(limit);
+  const { data, error } = await supabase.rpc("get_dm_history", { p_peer: peerId, p_limit: limit });
   if (error || !data) return [];
   return data as DirectMessage[];
 }
