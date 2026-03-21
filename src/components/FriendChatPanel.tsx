@@ -123,6 +123,8 @@ export function FriendChatPanel({
     }
   }, [pendingRequests.length, tab, friends.length]);
 
+  // 注意：不在申请清空后自动跳回，让用户可以主动查看空状态
+
   const handleSend = () => {
     const text = input.trim();
     if (!text) return;
@@ -497,9 +499,16 @@ export function FriendChatPanel({
 
             {/* 空状态 */}
             {pendingRequests.length === 0 && sentRequests.length === 0 && (
-              <div className="flex flex-col items-center gap-2 py-10 text-center">
-                <UserPlus className="h-7 w-7 text-foreground/15" />
-                <span className="text-xs text-foreground/35">暂无结缘申请<br/>在寺中修行时，AI 分身会自动结缘</span>
+              <div className="flex flex-col items-center gap-3 py-10 text-center">
+                <div className="h-14 w-14 grid place-items-center rounded-full bg-[var(--bronze-green)]/10 ring-1 ring-[var(--bronze-green)]/20">
+                  <UserPlus className="h-6 w-6 text-foreground/25" />
+                </div>
+                <div>
+                  <p className="text-sm font-title text-foreground/50">暂无结缘申请</p>
+                  <p className="mt-1 text-[11px] text-foreground/30 leading-relaxed">
+                    在「其他僧人」中主动发起结缘<br/>或等待 AI 分身自动结缘
+                  </p>
+                </div>
               </div>
             )}
           </div>

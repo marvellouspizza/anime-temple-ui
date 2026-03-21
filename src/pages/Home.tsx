@@ -48,8 +48,10 @@ import { toast } from "sonner";
 import {
   BookOpen,
   CalendarCheck,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Download,
   Eye,
   EyeOff,
@@ -245,6 +247,25 @@ export default function Home({ targetSection }: HomeProps) {
   // 缓存 pending 请求的 requester 档案信息
   const [pendingProfiles, setPendingProfiles] = useState<Record<string, { name: string; avatar: string }>>({});
   const prevPendingIdsRef = useRef<Set<number>>(new Set());
+
+  // 道友红点：有未读道友消息/申请时亮起，点击"我的道友"后熄灭
+  const [hasUnseenFriendActivity, setHasUnseenFriendActivity] = useState(false);
+  const friendsCountRef = useRef<number | null>(null);
+  // 有新的待处理申请或未读消息时亮起红点
+  useEffect(() => {
+    if (friendChat.pendingRequests.length > 0 || friendChat.friends.some(f => f.unread > 0)) {
+      setHasUnseenFriendActivity(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [friendChat.pendingRequests.length, friendChat.friends]);
+  // 好友数量增加（对方接受了结缘申请）时亮起红点
+  useEffect(() => {
+    const count = friendChat.friends.length;
+    if (friendsCountRef.current !== null && count > friendsCountRef.current) {
+      setHasUnseenFriendActivity(true);
+    }
+    friendsCountRef.current = count;
+  }, [friendChat.friends.length]);
   useEffect(() => {
     const ids = friendChat.pendingRequests.map(r => r.requester);
     if (ids.length === 0) { setPendingProfiles({}); return; }
@@ -674,12 +695,12 @@ export default function Home({ targetSection }: HomeProps) {
             </button>
             <button
               className="temple-icon-btn h-8 w-8 relative"
-              onClick={() => setShowFriendPanel(true)}
+              onClick={() => { setShowFriendPanel(true); setHasUnseenFriendActivity(false); }}
               aria-label="道友"
               title="道友列表"
             >
               <Heart className="h-4 w-4 text-[var(--bronze-green)]" />
-              {(friendChat.pendingRequests.length > 0 || friendChat.sentRequests.length > 0 || friendChat.friends.some(f => f.unread > 0)) && (
+              {hasUnseenFriendActivity && (
                 <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--cinnabar)] animate-pulse" />
               )}
             </button>
@@ -779,10 +800,10 @@ export default function Home({ targetSection }: HomeProps) {
               {([
                 { label: "寺庙概览", icon: <Landmark     className="h-5 w-5" />, onClick: () => setShowTempleOverview(true) },
                 { label: "其他僧人", icon: <Users        className="h-5 w-5" />, onClick: () => { setSelectedMonkId(null); setShowMonksPanel(true); } },
-                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => setShowFriendPanel(true), badge: friendChat.pendingRequests.length + friendChat.friends.filter(f => f.unread > 0).length },
+                { label: "我的道友", icon: <Heart        className="h-5 w-5" />, onClick: () => { setShowFriendPanel(true); setHasUnseenFriendActivity(false); }, dot: hasUnseenFriendActivity },
                 { label: "今日修行", icon: <CalendarCheck className="h-5 w-5" />, onClick: () => setShowDailyPanel(true) },
                 { label: "成就",     icon: <Trophy       className="h-5 w-5" />, onClick: () => { setShowAchievement(true); setAchieveTab("temples"); } },
-              ] as { label: string; icon: React.ReactNode; onClick: () => void; badge?: number }[]).map(({ label, icon, onClick, badge }) => (
+              ] as { label: string; icon: React.ReactNode; onClick: () => void; badge?: number; dot?: boolean }[]).map(({ label, icon, onClick, badge, dot }) => (
                 <button
                   key={label}
                   className="temple-icon-btn h-16 w-16 relative"
@@ -793,6 +814,9 @@ export default function Home({ targetSection }: HomeProps) {
                     <span className="text-[var(--gold)]">{icon}</span>
                     <span className="text-[10px] leading-none tracking-wide text-[var(--gold)]">{label}</span>
                   </div>
+                  {dot && (
+                    <span className="absolute top-0.5 right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--cinnabar)] animate-pulse" />
+                  )}
                   {badge != null && badge > 0 && (
                     <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] grid place-items-center rounded-full bg-[var(--cinnabar)] text-white text-[8px] font-bold leading-none px-1">
                       {badge > 99 ? "99+" : badge}
@@ -1399,22 +1423,67 @@ export default function Home({ targetSection }: HomeProps) {
                     {/* 互动按钮 */}
                     <div className="mx-6 h-px bg-[var(--bronze-green)]/20" />
                     <div className="flex gap-2 justify-end px-6 py-4">
-                      <button
-                        className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
-                        onClick={async () => {
-                          if (!supabaseUserId || !monk) return;
-                          const result = await friendChat.requestFriend(monk.id);
-                          if (result.ok) {
-                            toast.success(result.msg, { description: `「${monk.name}」已出现在你的道友列表中` });
-                            setShowFriendPanel(true);
-                          } else {
-                            toast.info(result.msg);
-                          }
-                        }}
-                      >
-                        <Heart className="h-3.5 w-3.5" />
-                        结缘
-                      </button>
+                      {/* ── 结缘按钮：根据双方关系显示互补状态 ── */}
+                      {(() => {
+                        const isFriend     = friendChat.friends.some(f => f.odataPeerId === monk.id);
+                        const iSentReq     = friendChat.sentRequests.some(s => s.peerId === monk.id);
+                        const theyReqMe    = friendChat.pendingRequests.find(r => r.requester === monk.id);
+
+                        if (isFriend) {
+                          return (
+                            <span className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm opacity-50 cursor-default select-none">
+                              <Heart className="h-3.5 w-3.5" />
+                              已是道友
+                            </span>
+                          );
+                        }
+                        if (iSentReq) {
+                          return (
+                            <span className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm opacity-60 cursor-default select-none">
+                              <Clock className="h-3.5 w-3.5" />
+                              等待回应
+                            </span>
+                          );
+                        }
+                        if (theyReqMe) {
+                          return (
+                            <button
+                              className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm text-[var(--gold)] ring-[var(--gold)]/50"
+                              onClick={async () => {
+                                const peerName = monk.name;
+                                friendChat.acceptRequest(theyReqMe.id);
+                                pushActivityEntry("🤝", "结缘一位道友", `接受「${peerName}」的结缘申请，已互为道友`);
+                                toast.success(`与「${peerName}」喜结道友！`);
+                                setHasUnseenFriendActivity(false);
+                                setSelectedMonkId(null);
+                                setShowMonksPanel(false);
+                                setShowFriendPanel(true);
+                              }}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              接受结缘
+                            </button>
+                          );
+                        }
+                        return (
+                          <button
+                            className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
+                            onClick={async () => {
+                              if (!supabaseUserId || !monk) return;
+                              const result = await friendChat.requestFriend(monk.id);
+                              if (result.ok) {
+                                toast.success(result.msg, { description: `「${monk.name}」已出现在你的道友列表中` });
+                                setShowFriendPanel(true);
+                              } else {
+                                toast.info(result.msg);
+                              }
+                            }}
+                          >
+                            <Heart className="h-3.5 w-3.5" />
+                            发起结缘
+                          </button>
+                        );
+                      })()}
                       <button
                         className="temple-ornate-btn flex items-center gap-1.5 px-4 py-2 text-sm"
                         onClick={() => comingSoon("观摩修行")}

@@ -119,11 +119,15 @@ export function useFriendChat(myUserId: string | null) {
   }, [myUserId, refreshFriends]);
 
   const acceptRequest = useCallback(async (friendshipId: number) => {
+    // 乐观更新：立即从 pending 移除，避免 UI 延迟
+    setPendingRequests(prev => prev.filter(r => r.id !== friendshipId));
     await acceptFriendRequest(friendshipId);
     refreshFriends();
   }, [refreshFriends]);
 
   const rejectRequest = useCallback(async (friendshipId: number) => {
+    // 乐观更新：立即从 pending 移除
+    setPendingRequests(prev => prev.filter(r => r.id !== friendshipId));
     await rejectFriendRequest(friendshipId);
     refreshFriends();
   }, [refreshFriends]);
@@ -142,6 +146,8 @@ export function useFriendChat(myUserId: string | null) {
   const openChat = useCallback(async (peerId: string) => {
     if (!myUserId) return;
     setActiveChatPeerId(peerId);
+    // 清除该好友的未读计数
+    setFriends(prev => prev.map(f => f.odataPeerId === peerId ? { ...f, unread: 0 } : f));
     // 加载历史
     const history = await fetchDirectMessages(myUserId, peerId);
     setMessages(history);
