@@ -1060,8 +1060,9 @@ export function useGameState(userId: string | null = null) {
     ? 100
     : Math.min(99, Math.floor((state.exp / needed) * 100));
 
-  const todayLoginAvailable = !state.dailyLoginDone;
-  const todayTaskAvailable = state.dailyLoginDone && !state.dailyTaskDone;
+  const todayStr = getToday();
+  const todayLoginAvailable = state.lastLoginDate !== todayStr || !state.dailyLoginDone;
+  const todayTaskAvailable = state.lastLoginDate === todayStr && state.dailyLoginDone && !state.dailyTaskDone;
 
   const isCloudLoading = !!userId && !isCloudLoaded;
 

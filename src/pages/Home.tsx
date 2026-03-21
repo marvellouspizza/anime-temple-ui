@@ -1141,12 +1141,17 @@ export default function Home({ targetSection }: HomeProps) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button className="flex flex-col items-center gap-1.5 group" onClick={doLogin} aria-label="每日签到">
-                    <div className={`grid h-11 w-11 place-items-center rounded-full transition-all group-active:scale-95 ${
-                      todayLoginAvailable
-                        ? "bg-[var(--cinnabar)]/10 ring-1 ring-[var(--cinnabar)]/50 group-hover:bg-[var(--cinnabar)]/20 group-hover:ring-[var(--cinnabar)]/80"
-                        : "bg-foreground/5 ring-1 ring-foreground/15"
-                    }`}>
-                      <CalendarCheck className={`h-5 w-5 ${todayLoginAvailable ? "text-[var(--cinnabar)]" : "text-foreground/30"}`} />
+                    <div className="relative">
+                      <div className={`grid h-11 w-11 place-items-center rounded-full transition-all group-active:scale-95 ${
+                        todayLoginAvailable
+                          ? "bg-[var(--cinnabar)]/10 ring-1 ring-[var(--cinnabar)]/50 group-hover:bg-[var(--cinnabar)]/20 group-hover:ring-[var(--cinnabar)]/80"
+                          : "bg-foreground/5 ring-1 ring-foreground/15"
+                      }`}>
+                        <CalendarCheck className={`h-5 w-5 ${todayLoginAvailable ? "text-[var(--cinnabar)]" : "text-foreground/30"}`} />
+                      </div>
+                      {todayLoginAvailable && (
+                        <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background" />
+                      )}
                     </div>
                     <span className={`text-[9px] leading-none ${todayLoginAvailable ? "text-[var(--cinnabar)]" : "text-foreground/30"}`}>签到</span>
                   </button>
