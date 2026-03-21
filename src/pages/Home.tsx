@@ -1853,6 +1853,10 @@ export default function Home({ targetSection }: HomeProps) {
                 toast.success(`与「${peerName}」喜结道友！`);
               }}
               onReject={(id) => { friendChat.rejectRequest(id); }}
+              onRemove={(peerId, name) => {
+                friendChat.deleteFriend(peerId);
+                toast.success(`已与「${name}」解除结缘`);
+              }}
               onClose={() => { setShowFriendPanel(false); friendChat.closeChat(); }}
             />
           </div>

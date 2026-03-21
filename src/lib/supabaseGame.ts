@@ -346,6 +346,13 @@ export async function fetchFriends(myId: string): Promise<FriendshipRow[]> { ret
 export async function fetchPendingRequests(myId: string): Promise<FriendshipRow[]> { return (await getFriendData()).pending; }
 export async function fetchSentRequests(myId: string): Promise<FriendshipRow[]> { return (await getFriendData()).sent; }
 
+/** 删除好友关系（双方均可操作，删后可重新发起结缘）*/
+export async function removeFriend(peerId: string): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.rpc("unfriend", { p_peer: peerId });
+  if (error) console.error("[Friends] unfriend:", error.message);
+}
+
 /** 根据 user ids 批量获取玩家名字和头像 */
 export async function fetchPlayersByIds(
   ids: string[]

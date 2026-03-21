@@ -18,6 +18,7 @@ import {
   fetchDirectMessages,
   sendDirectMessage,
   fetchPlayersByIds,
+  removeFriend,
   type FriendshipRow,
   type DirectMessage,
 } from "@/lib/supabaseGame";
@@ -124,6 +125,11 @@ export function useFriendChat(myUserId: string | null) {
 
   const rejectRequest = useCallback(async (friendshipId: number) => {
     await rejectFriendRequest(friendshipId);
+    refreshFriends();
+  }, [refreshFriends]);
+
+  const deleteFriend = useCallback(async (peerId: string) => {
+    await removeFriend(peerId);
     refreshFriends();
   }, [refreshFriends]);
 
@@ -249,6 +255,7 @@ export function useFriendChat(myUserId: string | null) {
     requestFriend,
     acceptRequest,
     rejectRequest,
+    deleteFriend,
     checkFriendship,
     activeChatPeerId,
     openChat,

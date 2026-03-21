@@ -12,13 +12,14 @@ import {
   Heart,
   MessageCircle,
   Send,
+  Trash2,
   UserPlus,
   Users,
   X,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { FriendInfo, SentRequestInfo } from "@/hooks/useFriendChat";
-import type { FriendshipRow, DirectMessage } from "@/lib/supabaseGame";
+import { fetchPlayerProfile, type FriendshipRow, type DirectMessage, type PlayerProfileLike } from "@/lib/supabaseGame";
 
 // ── 类型 ─────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ interface FriendChatPanelProps {
   onSend: (content: string) => void;
   onAccept: (id: number) => void;
   onReject: (id: number) => void;
+  onRemove: (peerId: string, name: string) => void;
   onClose: () => void;
 }
 
@@ -70,11 +72,27 @@ export function FriendChatPanel({
   onSend,
   onAccept,
   onReject,
+  onRemove,
   onClose,
 }: FriendChatPanelProps) {
   const [tab, setTab] = useState<"friends" | "requests">("friends");
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 查看资料
+  const [viewingFriend, setViewingFriend] = useState<FriendInfo | null>(null);
+  const [peerProfile, setPeerProfile] = useState<PlayerProfileLike | null>(null);
+  const [peerProfileLoading, setPeerProfileLoading] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  useEffect(() => {
+    if (!viewingFriend) { setPeerProfile(null); setConfirmRemove(false); return; }
+    setPeerProfileLoading(true);
+    fetchPlayerProfile(viewingFriend.odataPeerId).then(p => {
+      setPeerProfile(p);
+      setPeerProfileLoading(false);
+    });
+  }, [viewingFriend]);
 
   // 自动滚底
   useEffect(() => {
@@ -98,6 +116,118 @@ export function FriendChatPanel({
 
   // 当前聊天对象信息
   const chatFriend = friends.find(f => f.odataPeerId === activeChatPeerId);
+
+  // ── 资料视图 ──
+  if (viewingFriend) {
+    const birthdayDisplay = peerProfile?.birthday
+      ? new Date(peerProfile.birthday).toLocaleDateString("zh-CN", { month: "long", day: "numeric" })
+      : null;
+    return (
+      <div className="flex flex-col h-full">
+        {/* 标题栏 */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--bronze-green)]/30">
+          <button
+            className="grid h-7 w-7 place-items-center rounded-full text-foreground/40 hover:text-[var(--gold)] transition-colors"
+            onClick={() => setViewingFriend(null)}
+            aria-label="返回"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <span className="font-title text-base text-[var(--gold)] flex-1">道友资料</span>
+          <button
+            className="text-foreground/40 hover:text-foreground transition-colors text-xl leading-none"
+            onClick={onClose}
+            aria-label="关闭"
+          >×</button>
+        </div>
+
+        {/* 资料内容 */}
+        <div className="flex-1 overflow-y-auto px-5 py-6 flex flex-col items-center gap-4">
+          {/* 头像 */}
+          <Avatar className="h-24 w-24 ring-2 ring-[var(--gold)]/50 shadow-lg">
+            {viewingFriend.avatar && <AvatarImage src={viewingFriend.avatar} alt={viewingFriend.name} />}
+            <AvatarFallback className="bg-black/30 text-3xl font-title">{viewingFriend.name[0]}</AvatarFallback>
+          </Avatar>
+
+          {/* 名字 */}
+          <h2 className="font-title text-xl text-[var(--gold)]">{viewingFriend.name}</h2>
+
+          {peerProfileLoading ? (
+            <div className="text-xs text-foreground/30 mt-2">加载中…</div>
+          ) : peerProfile ? (
+            <div className="w-full space-y-2 mt-1">
+              {peerProfile.trainingStyle && (
+                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
+                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">修行方式</span>
+                  <span className="text-[12px] text-foreground/80 font-title">{peerProfile.trainingStyle}</span>
+                </div>
+              )}
+              {peerProfile.personality && (
+                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
+                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">性　格</span>
+                  <span className="text-[12px] text-foreground/80 font-title">{peerProfile.personality}</span>
+                </div>
+              )}
+              {peerProfile.gender && (
+                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
+                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">性　别</span>
+                  <span className="text-[12px] text-foreground/80 font-title">{peerProfile.gender}</span>
+                </div>
+              )}
+              {birthdayDisplay && (
+                <div className="temple-pill px-4 py-2.5 flex items-center gap-3">
+                  <span className="text-[11px] text-foreground/40 w-16 shrink-0">生　辰</span>
+                  <span className="text-[12px] text-foreground/80 font-title">{birthdayDisplay}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs text-foreground/30 mt-2">暂无详细资料</div>
+          )}
+
+          {/* 操作按钮区 */}
+          <div className="mt-auto w-full space-y-2">
+            <button
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--gold)]/15 text-[var(--gold)] font-title hover:bg-[var(--gold)]/25 active:scale-95 transition-all ring-1 ring-[var(--gold)]/30"
+              onClick={() => { setViewingFriend(null); onOpenChat(viewingFriend.odataPeerId); }}
+            >
+              <MessageCircle className="h-4 w-4" />
+              发消息
+            </button>
+
+            {/* 删除好友 — 二次确认 */}
+            {!confirmRemove ? (
+              <button
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-foreground/30 hover:text-[var(--cinnabar)] hover:bg-[var(--cinnabar)]/8 font-title text-sm transition-all"
+                onClick={() => setConfirmRemove(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                解除结缘
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  className="flex-1 py-2 rounded-xl bg-[var(--cinnabar)]/15 text-[var(--cinnabar)] font-title text-sm hover:bg-[var(--cinnabar)]/25 active:scale-95 transition-all ring-1 ring-[var(--cinnabar)]/30"
+                  onClick={() => {
+                    onRemove(viewingFriend.odataPeerId, viewingFriend.name);
+                    setViewingFriend(null);
+                  }}
+                >
+                  确认解除
+                </button>
+                <button
+                  className="flex-1 py-2 rounded-xl bg-black/15 text-foreground/40 font-title text-sm hover:bg-black/25 transition-all"
+                  onClick={() => setConfirmRemove(false)}
+                >
+                  取消
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── 聊天视图 ──
   if (activeChatPeerId && chatFriend) {
@@ -353,10 +483,10 @@ export function FriendChatPanel({
               <div className="space-y-2">
                 {/* 已结为道友 */}
                 {friends.map(f => (
-                  <button
+                  <div
                     key={f.odataId}
-                    className="w-full temple-pill flex items-center gap-3 px-3 py-2.5 text-left hover:ring-1 hover:ring-[var(--gold)]/50 transition-all group"
-                    onClick={() => onOpenChat(f.odataPeerId)}
+                    className="w-full temple-pill flex items-center gap-3 px-3 py-2.5 hover:ring-1 hover:ring-[var(--gold)]/50 transition-all group cursor-pointer"
+                    onClick={() => setViewingFriend(f)}
                   >
                     <Avatar className="h-10 w-10 ring-1 ring-[var(--bronze-green)]/40 group-hover:ring-[var(--gold)]/60 transition-[box-shadow] shrink-0">
                       {f.avatar && <AvatarImage src={f.avatar} />}
@@ -373,8 +503,15 @@ export function FriendChatPanel({
                         {f.unread > 99 ? "99+" : f.unread}
                       </span>
                     )}
-                    <MessageCircle className="h-4 w-4 text-foreground/20 group-hover:text-[var(--gold)] transition-colors shrink-0" />
-                  </button>
+                    <button
+                      className="grid h-7 w-7 place-items-center rounded-full text-foreground/20 hover:text-[var(--gold)] hover:bg-[var(--gold)]/10 transition-colors shrink-0"
+                      onClick={e => { e.stopPropagation(); onOpenChat(f.odataPeerId); }}
+                      aria-label="发消息"
+                      title="发消息"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </button>
+                  </div>
                 ))}
                 {/* 我发出的结缘申请（等待对方回应） */}
                 {sentRequests.map(sr => (
